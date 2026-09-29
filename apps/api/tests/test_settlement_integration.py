@@ -9,16 +9,13 @@ from app.modules.billing.settlement import settle_member_session
 from app.modules.billing.wallet import create_member_hold
 from app.modules.charging.constants import SessionStatus, SessionType
 from app.modules.charging.service import complete_session
+from tests.shared_loop import TEST_LOOP
 
 users = get_collection("users")
 sessions = get_collection("charging_sessions")
 wallet_holds = get_collection("wallet_holds")
 transactions = get_collection("transactions")
 stations = get_collection("charging_stations")
-
-_test_loop = asyncio.new_event_loop()
-
-
 
 def test_member_settlement_is_atomic_and_idempotent():
     async def scenario():
@@ -146,7 +143,7 @@ def test_member_settlement_is_atomic_and_idempotent():
             await stations.delete_many({"station_id": station_id})
             await users.delete_many({"user_id": user_id})
 
-    _test_loop.run_until_complete(scenario())
+    TEST_LOOP.run_until_complete(scenario())
 
 
 def test_member_settlement_concurrent_calls_charge_once():
@@ -254,4 +251,4 @@ def test_member_settlement_concurrent_calls_charge_once():
             await stations.delete_many({"station_id": station_id})
             await users.delete_many({"user_id": user_id})
 
-    _test_loop.run_until_complete(scenario())
+    TEST_LOOP.run_until_complete(scenario())

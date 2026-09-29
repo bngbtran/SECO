@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.db.mongodb import get_collection
+from app.websocket.manager import manager
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +125,43 @@ async def handle_message(
                 }
             },
         )
+
+        station = await stations.find_one(
+            {"station_id": station_id},
+            {
+                "_id": 0,
+                "current_session_id": 1,
+                "status": 1,
+            },
+        )
+
+        session_id = (
+            station.get("current_session_id")
+            if station
+            else None
+        )
+
+        if session_id and station.get("status") == "CHARGING":
+            await manager.broadcast(
+                {
+                    "type": "member_session_updated",
+                    "event": "TELEMETRY",
+                    "session_id": session_id,
+                    "station_id": station_id,
+                    "status": "CHARGING",
+                    "energy_kwh": data.get("energy_kwh"),
+                    "power_kw": data.get("power_kw"),
+                    "cost_vnd": data.get("cost_vnd"),
+                    "voltage_v": data.get("voltage_v"),
+                    "current_a": data.get("current_a"),
+                    "temperature_c": data.get("temperature_c"),
+                }
+            )
+
         return {
             "type": "telemetry",
             "station_id": station_id,
+            "session_id": session_id,
             "data": data,
         }
 
