@@ -1,6 +1,5 @@
 from app.db.mongodb import get_collection
 
-
 stations = get_collection("charging_stations")
 
 

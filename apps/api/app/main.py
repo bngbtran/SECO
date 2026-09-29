@@ -8,12 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.db.indexes import create_indexes
 from app.db.mongodb import check_database, close_database
+from app.modules.auth.router import router as auth_router
+from app.modules.station.router import router as station_router
 from app.mqtt.client import mqtt_service
 from app.mqtt.watchdog import run_station_watchdog
 from app.websocket.manager import manager
-from app.modules.auth.router import router as auth_router
-from app.modules.station.router import router as station_router
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -87,5 +86,5 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-    except Exception:
+    except RuntimeError:
         manager.disconnect(websocket)

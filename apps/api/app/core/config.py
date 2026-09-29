@@ -3,7 +3,6 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 API_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -13,7 +12,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
-    mongo_uri: str = "mongodb://localhost:27017"
+    mongo_uri: str = "mongodb://localhost:27017/?replicaSet=rs0"
     mongo_database: str = "seco"
 
     jwt_secret: str = "seco-dev-secret-change-this-before-production-2026"

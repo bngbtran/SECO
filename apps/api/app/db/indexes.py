@@ -99,6 +99,12 @@ async def create_indexes() -> None:
     )
     await _ensure_index(
         db.transactions,
+        [("session_id", ASCENDING), ("type", ASCENDING)],
+        unique=True,
+        name="transactions_session_type_unique",
+    )
+    await _ensure_index(
+        db.transactions,
         [("user_id", ASCENDING), ("created_at", DESCENDING)],
         name="transactions_user_created",
     )
@@ -124,7 +130,8 @@ async def create_indexes() -> None:
     await _ensure_index(
         db.wallet_holds,
         [("session_id", ASCENDING)],
-        name="wallet_holds_session",
+        unique=True,
+        name="wallet_holds_session_unique",
     )
 
     await _ensure_index(

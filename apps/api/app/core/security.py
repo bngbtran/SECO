@@ -1,10 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from pwdlib import PasswordHash
 
 from app.core.config import get_settings
-
 
 settings = get_settings()
 ALGORITHM = "HS256"
@@ -20,7 +19,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(user_id: str, role: str | None = None) -> str:
-    expires_at = datetime.now(timezone.utc) + timedelta(
+    expires_at = datetime.now(UTC) + timedelta(
         minutes=settings.jwt_expire_minutes
     )
     payload = {

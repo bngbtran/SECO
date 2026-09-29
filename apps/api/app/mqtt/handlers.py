@@ -1,8 +1,9 @@
 import json
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from app.db.mongodb import get_collection
 
@@ -46,7 +47,7 @@ def parse_topic(topic: str) -> tuple[str, str] | None:
 def decode_payload(payload: bytes) -> dict[str, Any]:
     value = json.loads(payload.decode("utf-8"))
     if not isinstance(value, dict):
-        raise ValueError("MQTT payload must be a JSON object")
+        raise TypeError("MQTT payload must be a JSON object")
     return value
 
 
@@ -59,7 +60,7 @@ async def handle_message(
         return None
 
     station_id, kind = parsed
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # /status uses plain text: ONLINE / OFFLINE
     if kind == "status":

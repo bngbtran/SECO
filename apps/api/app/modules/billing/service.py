@@ -1,12 +1,10 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.config import get_settings
 from app.modules.billing.constants import (
     DEFAULT_POWER_KW,
     DEFAULT_PRICE_PER_KWH_VND,
-    DEFAULT_TICK_SECONDS,
 )
-
 
 settings = get_settings()
 
@@ -29,7 +27,7 @@ def cost_for_energy(
     if price_per_kwh_vnd < 0:
         raise ValueError("price_per_kwh_vnd must be >= 0")
     value = energy_kwh * Decimal(price_per_kwh_vnd)
-    return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return int(value.quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def tick_values() -> tuple[Decimal, int]:

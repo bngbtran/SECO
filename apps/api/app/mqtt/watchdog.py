@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.core.config import get_settings
 from app.db.mongodb import get_collection
@@ -16,7 +16,7 @@ CHECK_INTERVAL_SECONDS = 15
 async def run_station_watchdog() -> None:
     while True:
         try:
-            cutoff = datetime.now(timezone.utc) - timedelta(seconds=OFFLINE_TIMEOUT_SECONDS)
+            cutoff = datetime.now(UTC) - timedelta(seconds=OFFLINE_TIMEOUT_SECONDS)
             result = await stations.update_many(
                 {
                     "is_online": True,
@@ -25,7 +25,7 @@ async def run_station_watchdog() -> None:
                 {
                     "$set": {
                         "is_online": False,
-                        "updated_at": datetime.now(timezone.utc),
+                        "updated_at": datetime.now(UTC),
                     }
                 },
             )

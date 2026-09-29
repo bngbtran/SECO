@@ -3,7 +3,6 @@ from fastapi import APIRouter, HTTPException, status
 from app.modules.station.schemas import StationResponse
 from app.modules.station.service import get_station, list_stations
 
-
 router = APIRouter(prefix="/api/v1/stations", tags=["Stations"])
 
 

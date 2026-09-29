@@ -5,7 +5,6 @@ from app.core.security import create_access_token, verify_password
 from app.db.mongodb import get_collection
 from app.modules.auth.schemas import LoginRequest, LoginResponse, UserMe
 
-
 router = APIRouter(prefix="/api/v1/auth", tags=["Auth"])
 users = get_collection("users")
 

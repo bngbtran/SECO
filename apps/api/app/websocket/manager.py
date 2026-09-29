@@ -1,4 +1,4 @@
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 
 class ConnectionManager:
@@ -17,7 +17,7 @@ class ConnectionManager:
         for websocket in self.connections:
             try:
                 await websocket.send_json(data)
-            except Exception:
+            except (RuntimeError, WebSocketDisconnect):
                 dead.append(websocket)
 
         for websocket in dead:

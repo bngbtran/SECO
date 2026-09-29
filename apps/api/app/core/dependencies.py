@@ -6,7 +6,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.security import decode_access_token
 from app.db.mongodb import get_collection
 
-
 bearer = HTTPBearer(auto_error=True)
 users = get_collection("users")
 
@@ -44,6 +43,9 @@ async def get_current_user(
     return user
 
 
+CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+
 async def require_role(required_role: str, user):
     if user.get("role") != required_role:
         raise HTTPException(
@@ -53,14 +55,13 @@ async def require_role(required_role: str, user):
     return user
 
 
-async def require_admin(user=Depends(get_current_user)):
+async def require_admin(user: CurrentUser):
     return await require_role("ADMIN", user)
 
 
-async def require_technician(user=Depends(get_current_user)):
+async def require_technician(user: CurrentUser):
     return await require_role("TECHNICIAN", user)
 
 
-CurrentUser = Annotated[dict, Depends(get_current_user)]
 CurrentAdmin = Annotated[dict, Depends(require_admin)]
 CurrentTechnician = Annotated[dict, Depends(require_technician)]
