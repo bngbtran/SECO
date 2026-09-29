@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: seco-api
+Version: 0.1.0
+Summary: SECO Smart EV Charging FastAPI backend - shared core
+Requires-Python: <3.12,>=3.11
+Requires-Dist: fastapi[standard]<1,>=0.116
+Requires-Dist: pymongo<5,>=4.14
+Requires-Dist: pydantic-settings<3,>=2.10
+Requires-Dist: PyJWT<3,>=2.10
+Requires-Dist: pwdlib[argon2]<1,>=0.2
+Requires-Dist: aiomqtt<3,>=2.5
+Provides-Extra: dev
+Requires-Dist: pytest<9,>=8; extra == "dev"
+Requires-Dist: httpx<1,>=0.27; extra == "dev"
+Requires-Dist: ruff<1,>=0.13; extra == "dev"

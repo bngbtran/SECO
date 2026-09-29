@@ -1,0 +1,11 @@
+fastapi[standard]<1,>=0.116
+pymongo<5,>=4.14
+pydantic-settings<3,>=2.10
+PyJWT<3,>=2.10
+pwdlib[argon2]<1,>=0.2
+aiomqtt<3,>=2.5
+
+[dev]
+pytest<9,>=8
+httpx<1,>=0.27
+ruff<1,>=0.13

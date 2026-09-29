@@ -317,6 +317,7 @@ createOrUpdateCollection("charging_sessions", {
     },
 
     stop_reason: {
+      bsonType: ["string", "null"],
       enum: [
         "UNPLUG",
         "MAX_BUDGET",
@@ -324,7 +325,8 @@ createOrUpdateCollection("charging_sessions", {
         "TECHNICIAN",
         "OVER_TEMPERATURE",
         "E_STOP",
-        "SYSTEM_ERROR"
+        "SYSTEM_ERROR",
+        null
       ]
     },
 
@@ -883,6 +885,14 @@ dbRef.charging_sessions.createIndex(
 /* TRANSACTIONS */
 
 dbRef.transactions.createIndex(
+  { session_id: 1, type: 1 },
+  {
+    unique: true,
+    name: "transactions_session_type_unique"
+  }
+);
+
+dbRef.transactions.createIndex(
   { transaction_id: 1 },
   {
     unique: true,
@@ -943,7 +953,8 @@ dbRef.wallet_holds.createIndex(
 dbRef.wallet_holds.createIndex(
   { session_id: 1 },
   {
-    name: "wallet_holds_session"
+    unique: true,
+    name: "wallet_holds_session_unique"
   }
 );
 

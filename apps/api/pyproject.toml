@@ -1,24 +1,22 @@
 [project]
 name = "seco-api"
 version = "0.1.0"
-description = "SECO Smart EV Charging FastAPI backend"
-requires-python = ">=3.12"
-
+description = "SECO Smart EV Charging FastAPI backend - shared core"
+requires-python = ">=3.11,<3.12"
 dependencies = [
-    "fastapi[standard]",
-    "pymongo",
-    "pydantic-settings",
-    "pyjwt",
-    "pwdlib[argon2]",
-    "aiomqtt",
-    "qrcode[pil]"
+    "fastapi[standard]>=0.116,<1",
+    "pymongo>=4.14,<5",
+    "pydantic-settings>=2.10,<3",
+    "PyJWT>=2.10,<3",
+    "pwdlib[argon2]>=0.2,<1",
+    "aiomqtt>=2.5,<3",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "httpx",
-    "ruff"
+    "pytest>=8,<9",
+    "httpx>=0.27,<1",
+    "ruff>=0.13,<1",
 ]
 
 [tool.ruff]
