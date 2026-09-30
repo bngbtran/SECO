@@ -71,13 +71,17 @@ Mock stations (`is_simulated: true`) exist for the map; no hardware backs them.
 | Account | Role | Balance | RFID UID | Vehicle |
 |---|---|---|---|---|
 | admin@seco.local | ADMIN | – | – | – |
+| tranbnb@seco.local (Bùi Ngọc Bảo Trân) | ADMIN, password `tran` | – | – | – |
+| tunv@seco.local (Nguyễn Văn Tú) | ADMIN, password `tu` | – | – | – |
+| nguyenlb@seco.local (Lê Bảo Nguyên) | ADMIN, password `nguyen` | – | – | – |
+| hieuln@seco.local (Lê Ngọc Hiếu) | ADMIN, password `hieu` | – | – | – |
 | tech@seco.local | TECHNICIAN | – | `7E1C2A9F` | – |
 | user@seco.local | USER | 200 000 | `A1B2C3D4` | 43A-123.45 VinFast VF e34 |
 | member2@seco.local | USER | 50 000 | `B2C3D4E5` (+ `D4E5F6A7` locked) | 43A-678.90 VinFast VF 5 |
 | member3@seco.local | USER | 0 | `C3D4E5F6` (+ 1 card pending registration) | 92A-111.22 VinFast VF 8 |
 
-New accounts get the password in `SEED_PASSWORD` (default `Seco@2026`). Change it
-before seeding a database that is reachable from the internet.
+Team admin accounts get their given name as default password (`tran`, `tu`,
+`nguyen`, `hieu`). Other new accounts get `SEED_PASSWORD` (default `Seco@2026`).
 
 ## Setting up the shared Atlas cluster (DB owner, once)
 

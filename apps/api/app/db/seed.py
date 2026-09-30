@@ -45,13 +45,18 @@ STATIONS = [
      True, "ERROR", True),
 ]
 
-# (email, name, role, balance_vnd)
+# (email, name, role, balance_vnd, password); password None = SEED_PASSWORD
 USERS = [
-    ("admin@seco.local", "SECO Admin", "ADMIN", 0),
-    ("tech@seco.local", "SECO Technician", "TECHNICIAN", 0),
-    ("user@seco.local", "SECO User", "USER", 200_000),
-    ("member2@seco.local", "Trần Thị Bình", "USER", 50_000),
-    ("member3@seco.local", "Lê Văn Cường", "USER", 0),
+    ("admin@seco.local", "SECO Admin", "ADMIN", 0, None),
+    # Team members, one admin account each; default password = given name.
+    ("tranbnb@seco.local", "Bùi Ngọc Bảo Trân", "ADMIN", 0, "tran"),
+    ("tunv@seco.local", "Nguyễn Văn Tú", "ADMIN", 0, "tu"),
+    ("nguyenlb@seco.local", "Lê Bảo Nguyên", "ADMIN", 0, "nguyen"),
+    ("hieuln@seco.local", "Lê Ngọc Hiếu", "ADMIN", 0, "hieu"),
+    ("tech@seco.local", "SECO Technician", "TECHNICIAN", 0, None),
+    ("user@seco.local", "SECO User", "USER", 200_000, None),
+    ("member2@seco.local", "Trần Thị Bình", "USER", 50_000, None),
+    ("member3@seco.local", "Lê Văn Cường", "USER", 0, None),
 ]
 
 # (card_id, uid, owner email, label, is_active, pending)
@@ -108,10 +113,10 @@ async def seed_stations() -> None:
 
 async def seed_users(password: str, reset_passwords: bool) -> dict[str, str]:
     now = now_utc()
-    password_hash = hash_password(password)
+    shared_hash = hash_password(password)
     ids = {}
 
-    for email, name, role, balance in USERS:
+    for email, name, role, balance, own_password in USERS:
         existing = await db.users.find_one({"email": email}, {"user_id": 1})
         user_id = existing["user_id"] if existing else str(uuid4())
         ids[email] = user_id
@@ -128,7 +133,9 @@ async def seed_users(password: str, reset_passwords: bool) -> dict[str, str]:
             },
         }
         if reset_passwords or not existing:
-            update["$set"]["password_hash"] = password_hash
+            update["$set"]["password_hash"] = (
+                hash_password(own_password) if own_password else shared_hash
+            )
 
         await db.users.update_one({"email": email}, update, upsert=True)
 
@@ -207,9 +214,10 @@ async def main() -> None:
         await seed_rfid_cards(user_ids)
         await seed_vehicles(user_ids)
 
-        print("\nDemo accounts (password for newly created accounts: SEED_PASSWORD):")
-        for email, _, role, _ in USERS:
-            print(f"  {role:<10} {email}")
+        print("\nDemo accounts (password when first created):")
+        for email, _, role, _, own_password in USERS:
+            shown = f"'{own_password}'" if own_password else "SEED_PASSWORD"
+            print(f"  {role:<10} {email:<22} {shown}")
     finally:
         await close_database()
 
