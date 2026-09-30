@@ -102,6 +102,9 @@ async def create_indexes() -> None:
         [("session_id", ASCENDING), ("type", ASCENDING)],
         unique=True,
         name="transactions_session_type_unique",
+        partialFilterExpression={
+            "session_id": {"$type": "string"},
+        },
     )
     await _ensure_index(
         db.transactions,

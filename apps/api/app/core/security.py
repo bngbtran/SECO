@@ -18,13 +18,19 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return password_hash.verify(password, hashed_password)
 
 
-def create_access_token(user_id: str, role: str | None = None) -> str:
+def create_access_token(
+    user_id: str,
+    role: str | None = None,
+    token_version: int = 0,
+) -> str:
     expires_at = datetime.now(UTC) + timedelta(
         minutes=settings.jwt_expire_minutes
     )
     payload = {
         "sub": user_id,
         "exp": expires_at,
+        # Logout bumps users.token_version, which revokes every token issued before.
+        "ver": token_version,
     }
     if role:
         payload["role"] = role

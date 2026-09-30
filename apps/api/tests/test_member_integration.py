@@ -225,7 +225,7 @@ def test_member_budget_cannot_exceed_balance():
     TEST_LOOP.run_until_complete(scenario())
 
 
-def test_member_start_creates_session_and_hold():
+def test_member_start_creates_session_without_hold():
     async def scenario():
         user_id = f"test-member-{uuid4()}"
         card_id = f"RFID-{uuid4()}"
@@ -297,15 +297,14 @@ def test_member_start_creates_session_and_hold():
             assert stored_session is not None
             assert stored_session["status"] == "ACTIVE"
 
-            hold = await wallet_holds.find_one(
-                {"session_id": session["session_id"]},
-                {"_id": 0},
-            )
+            assert stored_session["started_at"] is not None
+            assert stored_session["connector_locked"] is False
+            assert stored_session["budget_mode"] == "EXPLICIT"
 
-            assert hold is not None
-            assert hold["user_id"] == user_id
-            assert hold["amount_vnd"] == 50_000
-            assert hold["status"] == "HOLDING"
+            # DD v1.2: no wallet hold, money is deducted when the session ends.
+            assert await wallet_holds.count_documents(
+                {"session_id": session["session_id"]}
+            ) == 0
 
             stored_user = await users.find_one(
                 {"user_id": user_id},
@@ -317,7 +316,7 @@ def test_member_start_creates_session_and_hold():
             )
 
             assert stored_user["balance_vnd"] == 200_000
-            assert stored_user["held_balance_vnd"] == 50_000
+            assert stored_user["held_balance_vnd"] == 0
 
             station = await stations.find_one(
                 {"station_id": station_id},
@@ -451,13 +450,6 @@ def test_member_stop_charging_completes_and_settles():
 
             assert stored_station["status"] == "READY"
             assert stored_station["current_session_id"] is None
-
-            stored_hold = await wallet_holds.find_one(
-                {"session_id": session_id},
-                {"_id": 0, "status": 1},
-            )
-
-            assert stored_hold["status"] == "RELEASED"
 
         finally:
             if session_id:
