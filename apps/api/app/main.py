@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.dependencies import user_from_token
 from app.db.migrations import apply_migrations
 from app.db.mongodb import check_database, close_database
+from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
 from app.modules.charging.ticker import run_session_ticker
 from app.modules.guest.router import router as guest_router
@@ -68,6 +69,7 @@ app.include_router(auth_router)
 app.include_router(station_router)
 app.include_router(member_router)
 app.include_router(guest_router)
+app.include_router(admin_router)
 
 @app.get("/health", tags=["Health"])
 async def health():

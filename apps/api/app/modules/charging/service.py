@@ -16,6 +16,7 @@ from app.modules.charging.constants import (
     StationStatus,
     StopReason,
 )
+from app.modules.pricing.service import get_current_price
 
 settings = get_settings()
 
@@ -169,6 +170,7 @@ def build_session_document(
     session_type: SessionType,
     user_id: str | None,
     max_budget_vnd: int | None,
+    price_per_kwh_vnd: int | None = None,
 ) -> dict:
     now = now_utc()
 
@@ -182,7 +184,9 @@ def build_session_document(
         "energy_kwh": Decimal128("0"),
         "power_kw": Decimal128(str(settings.energy_power_kw_decimal)),
         # Snapshot so history does not change when the tariff changes (DD 5).
-        "price_per_kwh_vnd": settings.price_per_kwh_vnd,
+        "price_per_kwh_vnd": (
+            price_per_kwh_vnd if price_per_kwh_vnd is not None else settings.price_per_kwh_vnd
+        ),
         "cost_vnd": 0,
         "stop_reason": None,
         "started_at": now,
@@ -263,6 +267,7 @@ async def create_member_session(
         session_type=SessionType.MEMBER,
         user_id=user_id,
         max_budget_vnd=effective,
+        price_per_kwh_vnd=await get_current_price(),
     )
     document["budget_mode"] = "EXPLICIT" if max_budget_vnd is not None else "BALANCE"
 
@@ -284,6 +289,7 @@ async def create_guest_session(
         session_type=SessionType.GUEST,
         user_id=None,
         max_budget_vnd=effective,
+        price_per_kwh_vnd=await get_current_price(),
     )
     # Guests have no wallet: without a budget they charge until they unplug.
     document["budget_mode"] = "EXPLICIT" if effective is not None else "NONE"
@@ -408,13 +414,9 @@ async def mark_session_waiting_payment(
     session_id: str,
     stop_reason: str | StopReason,
 ) -> dict:
+    # Any stop reason, including a remote STOP by an admin (TECHNICIAN): the
+    # guest still pays for the energy already delivered.
     reason = normalize_stop_reason(stop_reason)
-
-    if reason == StopReason.TECHNICIAN.value:
-        raise BusinessRuleError(
-            f"Stop reason {reason} cannot move session to WAITING_PAYMENT"
-        )
-
     now = now_utc()
 
     result = await sessions.find_one_and_update(

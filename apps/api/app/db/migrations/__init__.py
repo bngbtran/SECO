@@ -11,11 +11,11 @@ from types import ModuleType
 
 from pymongo.errors import DuplicateKeyError
 
-from app.db.migrations import m0001_core, m0002_charging, m0003_logs
+from app.db.migrations import m0001_core, m0002_charging, m0003_logs, m0004_admin
 
 logger = logging.getLogger(__name__)
 
-MIGRATIONS: list[ModuleType] = [m0001_core, m0002_charging, m0003_logs]
+MIGRATIONS: list[ModuleType] = [m0001_core, m0002_charging, m0003_logs, m0004_admin]
 
 LEDGER = "schema_migrations"
 

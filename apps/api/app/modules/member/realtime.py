@@ -5,6 +5,7 @@ from app.core.config import get_settings
 from app.db.mongodb import get_collection
 from app.modules.charging.constants import StationStatus, StopReason
 from app.modules.charging.realtime import publish_station_command, to_jsonable
+from app.modules.logs.service import record_error
 from app.modules.member.service import (
     list_active_member_sessions,
     process_member_session,
@@ -103,6 +104,13 @@ async def tick_active_sessions() -> None:
                     session_id=session["session_id"],
                     stop_reason=StopReason.SYSTEM_ERROR,
                     station_status=StationStatus.ERROR,
+                )
+                await record_error(
+                    station_id=session["station_id"],
+                    error_type="COMMUNICATION_ERROR",
+                    severity="ERROR",
+                    session_id=session["session_id"],
+                    message="Mất kết nối với trạm khi đang sạc, phiên bị dừng",
                 )
                 await announce_stopped(result)
                 continue
