@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.dependencies import user_from_token
-from app.db.indexes import create_indexes
+from app.db.migrations import apply_migrations
 from app.db.mongodb import check_database, close_database
 from app.modules.auth.router import router as auth_router
 from app.modules.charging.ticker import run_session_ticker
@@ -29,7 +29,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await check_database()
-    await create_indexes()
+    await apply_migrations()
 
     # Handlers push their own filtered WebSocket events; raw MQTT results are not
     # broadcast because they can contain member data (RFID owner, balance).

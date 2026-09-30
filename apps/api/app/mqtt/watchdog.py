@@ -21,6 +21,8 @@ async def run_station_watchdog() -> None:
                 {
                     "is_online": True,
                     "last_heartbeat_at": {"$lt": cutoff},
+                    # Mock stations on the map have no hardware sending heartbeats.
+                    "is_simulated": {"$ne": True},
                 },
                 {
                     "$set": {
