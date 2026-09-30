@@ -26,6 +26,7 @@ from app.modules.guest.service import (
     start_guest_charging,
     stop_guest_session,
 )
+from app.modules.logs.service import record_stop_error
 from app.modules.member.realtime import announce_stopped, broadcast_session
 from app.modules.member.service import (
     get_active_pending_budget,
@@ -441,6 +442,28 @@ async def _handle_event(station_id: str, data: dict[str, Any]) -> dict[str, Any]
                 station_status=StationStatus.ERROR if is_safety else StationStatus.READY,
             )
             await announce_stopped(result)
+
+        if is_safety:
+            await record_stop_error(
+                station_id=station_id,
+                stop_reason=stop_reason,
+                session_id=session_id if active else None,
+                details=data,
+            )
+            if not active:
+                # Idle station: still force the safe state (DD FR06).
+                await stations.update_one(
+                    {"station_id": station_id, "status": {"$ne": StationStatus.MAINTENANCE.value}},
+                    {"$set": {"status": StationStatus.ERROR.value, "updated_at": now_utc()}},
+                )
+            await manager.broadcast(
+                {
+                    "type": "station_error",
+                    "station_id": station_id,
+                    "error_type": stop_reason,
+                    "session_id": session_id if active else None,
+                }
+            )
 
     return {
         "type": "event",

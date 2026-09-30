@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from app.core.config import get_settings
 from app.core.mongo_types import from_decimal128
-from app.modules.billing.service import cost_for_energy, energy_for_seconds, tick_values
+from app.modules.billing.service import cost_for_energy, energy_for_seconds
 from app.modules.charging.service import set_session_usage
 
 settings = get_settings()
@@ -38,7 +38,8 @@ async def refresh_session_usage(session: dict) -> tuple[dict, bool]:
     tick_seconds = settings.energy_tick_seconds
     price = int(session.get("price_per_kwh_vnd", settings.price_per_kwh_vnd))
     power_kw = from_decimal128(session.get("power_kw", settings.energy_power_kw_decimal))
-    _, tick_cost_vnd = tick_values()
+    # The session's own snapshot price, not today's tariff.
+    tick_cost_vnd = cost_for_energy(energy_for_seconds(tick_seconds, power_kw), price)
 
     elapsed = (now_utc() - _as_utc(session["started_at"])).total_seconds()
     ticks = max(int(elapsed // tick_seconds), 0)

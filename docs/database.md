@@ -44,6 +44,7 @@ in `schema_migrations` so it runs once per database.
 | 0001 | DB-01 | `users`, `vehicles`, `rfid_cards`, `charging_stations` |
 | 0002 | DB-02 | `charging_sessions`, `wallet_holds`, `transactions`, `payment_intents` |
 | 0003 | DB-03 | `maintenance_records`, `error_logs`, `audit_logs` |
+| 0004 | UC-A02, UC-A04 | `price_history` (electricity price, one row in force); RFID cards may have no owner; `users.phone` |
 
 To change the schema, add `m0004_<name>.py` with `VERSION = 4` and an `up(db)`,
 and append it to `MIGRATIONS` in `app/db/migrations/__init__.py`. Do not edit a

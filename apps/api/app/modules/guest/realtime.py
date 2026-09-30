@@ -11,6 +11,7 @@ from app.modules.guest.service import (
     process_guest_session,
     stop_guest_session,
 )
+from app.modules.logs.service import record_error
 from app.websocket.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -178,6 +179,13 @@ async def tick_guest_sessions() -> None:
                     session_id=session["session_id"],
                     stop_reason=StopReason.SYSTEM_ERROR,
                     station_status=StationStatus.ERROR,
+                )
+                await record_error(
+                    station_id=session["station_id"],
+                    error_type="COMMUNICATION_ERROR",
+                    severity="ERROR",
+                    session_id=session["session_id"],
+                    message="Mất kết nối với trạm khi đang sạc, phiên bị dừng",
                 )
                 await announce_guest_stopped(result)
                 continue
