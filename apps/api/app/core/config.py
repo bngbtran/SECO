@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     mqtt_password: str | None = None
     mqtt_tls: bool = False
     mqtt_client_id: str = "seco-api"
+    # API instances sharing a broker form one shared-subscription group for
+    # station requests, so each request is handled (and answered) once.
+    # Empty disables it (every instance handles every request).
+    mqtt_share_group: str = "seco-api"
+
+    # Admin desk RFID reader used to assign cards to members (simulator/admin).
+    admin_reader_id: str = "READER-01"
+    card_registration_timeout_seconds: int = 90
 
     web_origin: str = "http://localhost:5173"
 
