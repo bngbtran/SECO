@@ -7,12 +7,26 @@ from typing import Any
 
 from app.core.exceptions import SECOError
 from app.db.mongodb import get_collection
-from app.modules.charging.constants import SessionStatus, SessionType, StationStatus, StopReason
-from app.modules.member.realtime import (
-    announce_stopped,
-    broadcast_session,
-    to_jsonable,
+from app.modules.charging.constants import (
+    ConnectorLock,
+    SessionStatus,
+    SessionType,
+    StationStatus,
+    StopReason,
 )
+from app.modules.charging.realtime import to_jsonable
+from app.modules.guest.realtime import (
+    announce_guest_stopped,
+    announce_payment_qr,
+    broadcast_guest_session,
+)
+from app.modules.guest.service import (
+    process_guest_session,
+    request_new_payment,
+    start_guest_charging,
+    stop_guest_session,
+)
+from app.modules.member.realtime import announce_stopped, broadcast_session
 from app.modules.member.service import (
     get_active_pending_budget,
     process_member_telemetry,
@@ -167,15 +181,19 @@ async def _handle_session_end(station_id: str, payload: dict[str, Any]) -> dict[
     session_id = str(payload.get("session_id", ""))
 
     session = await sessions.find_one(
-        {
-            "session_id": session_id,
-            "station_id": station_id,
-            "type": SessionType.MEMBER.value,
-        },
-        {"_id": 0, "status": 1},
+        {"session_id": session_id, "station_id": station_id},
+        {"_id": 0, "status": 1, "type": 1},
     )
     if not session:
-        return {"ok": False, "error": "Member charging session not found"}
+        return {"ok": False, "error": "Charging session not found"}
+
+    if session["type"] == SessionType.GUEST.value:
+        result = await stop_guest_session(
+            session_id=session_id,
+            stop_reason=payload.get("reason") or StopReason.UNPLUG.value,
+        )
+        await announce_guest_stopped(result, send_stop=False)
+        return {"ok": True, **_guest_stop_brief(result)}
 
     was_active = session["status"] == SessionStatus.ACTIVE.value
     result = await stop_member_session(
@@ -193,9 +211,55 @@ async def _handle_session_end(station_id: str, payload: dict[str, Any]) -> dict[
     }
 
 
+def _payment_brief(payment: dict | None) -> dict[str, Any] | None:
+    if not payment:
+        return None
+    return {
+        "payment_id": payment["payment_id"],
+        "amount_vnd": payment["amount_vnd"],
+        "status": payment["status"],
+        "qr_payload": payment["qr_payload"],
+        "expires_at": payment["expires_at"],
+    }
+
+
+def _guest_stop_brief(result: dict) -> dict[str, Any]:
+    return {
+        "session": _session_brief(result["session"]),
+        "requires_payment": result["requires_payment"],
+        "payment": _payment_brief(result["payment"]),
+    }
+
+
+async def _handle_guest_start(station_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """UC-G02/G03: START pressed at the station, with an optional budget from the keypad."""
+    max_budget = payload.get("max_budget_vnd")
+    session = await start_guest_charging(
+        station_id=station_id,
+        max_budget_vnd=int(max_budget) if max_budget is not None else None,
+    )
+    await broadcast_guest_session(session, "STARTED")
+    return {"ok": True, "session": _session_brief(session)}
+
+
+async def _handle_guest_payment_request(
+    station_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """UC-G10: the station asks for a new QR after the previous one expired."""
+    payment = await request_new_payment(str(payload.get("session_id", "")))
+    if payment["station_id"] != station_id:
+        return {"ok": False, "error": "Session belongs to another station"}
+
+    await announce_payment_qr(payment)
+    return {"ok": True, "payment": _payment_brief(payment)}
+
+
 dispatcher.register("RFID_VERIFY", _handle_rfid_verify)
 dispatcher.register("SESSION_START", _handle_session_start)
 dispatcher.register("SESSION_END", _handle_session_end)
+dispatcher.register("GUEST_START", _handle_guest_start)
+dispatcher.register("GUEST_PAYMENT_REQUEST", _handle_guest_payment_request)
 
 
 def parse_topic(topic: str) -> tuple[str, str] | None:
@@ -279,7 +343,32 @@ async def _handle_telemetry(station_id: str, data: dict[str, Any]) -> dict[str, 
             {"type": "station_telemetry", "station_id": station_id, "data": data}
         )
 
-    if session_id and station.get("status") == StationStatus.CHARGING.value:
+    open_session = (
+        await sessions.find_one(
+            {"session_id": session_id},
+            {"_id": 0},
+        )
+        if session_id
+        else None
+    )
+
+    if open_session and open_session["type"] == SessionType.GUEST.value:
+        if open_session["status"] == SessionStatus.ACTIVE.value:
+            accounting = await process_guest_session(open_session)
+            if accounting["auto_stopped"]:
+                await announce_guest_stopped(accounting)
+            else:
+                await broadcast_guest_session(
+                    accounting["session"],
+                    "TELEMETRY",
+                    telemetry=data,
+                )
+        else:
+            # Waiting for payment: the relay is off, report sensor values only.
+            await manager.broadcast(
+                {"type": "station_telemetry", "station_id": station_id, "data": data}
+            )
+    elif session_id and station.get("status") == StationStatus.CHARGING.value:
         accounting = await process_member_telemetry(station_id=station_id, telemetry=data)
 
         if accounting and accounting["auto_stopped"]:
@@ -287,7 +376,7 @@ async def _handle_telemetry(station_id: str, data: dict[str, Any]) -> dict[str, 
         elif accounting:
             await broadcast_session(accounting["session"], "TELEMETRY", telemetry=data)
         else:
-            # No member session (e.g. guest): relay the station's own values.
+            # No session record for this station: relay the station's own values.
             await manager.broadcast(
                 {
                     "type": "member_session_updated",
@@ -331,14 +420,21 @@ async def _handle_event(station_id: str, data: dict[str, Any]) -> dict[str, Any]
                 {
                     "session_id": session_id,
                     "station_id": station_id,
-                    "type": SessionType.MEMBER.value,
                     "status": SessionStatus.ACTIVE.value,
                 },
-                {"_id": 0, "session_id": 1},
+                {"_id": 0, "session_id": 1, "type": 1},
             )
 
-        if active:
-            is_safety = stop_reason in _SAFETY_STOP_REASONS
+        is_safety = stop_reason in _SAFETY_STOP_REASONS
+
+        if active and active["type"] == SessionType.GUEST.value:
+            result = await stop_guest_session(
+                session_id=session_id,
+                stop_reason=stop_reason,
+                station_status=StationStatus.ERROR if is_safety else None,
+            )
+            await announce_guest_stopped(result)
+        elif active:
             result = await stop_member_session(
                 session_id=session_id,
                 stop_reason=stop_reason,
@@ -352,6 +448,25 @@ async def _handle_event(station_id: str, data: dict[str, Any]) -> dict[str, Any]
         "data": data,
         "result": to_jsonable(result) if result else None,
     }
+
+
+async def _apply_lock_ack(station_id: str, data: dict[str, Any]) -> None:
+    """UC-G06: the station reports whether the connector actually (un)locked."""
+    command = str(data.get("command", "")).upper()
+    if command not in {"LOCK", "UNLOCK"}:
+        return
+
+    if data.get("ok", True) is False:
+        lock_state = ConnectorLock.UNKNOWN.value
+    elif command == "LOCK":
+        lock_state = ConnectorLock.LOCKED.value
+    else:
+        lock_state = ConnectorLock.UNLOCKED.value
+
+    await stations.update_one(
+        {"station_id": station_id},
+        {"$set": {"connector_lock": lock_state, "updated_at": now_utc()}},
+    )
 
 
 async def handle_message(
@@ -394,6 +509,7 @@ async def handle_message(
         }
 
     if kind == "cmd_ack":
+        await _apply_lock_ack(station_id, data)
         await manager.broadcast(
             {"type": "station_command_ack", "station_id": station_id, "data": data}
         )

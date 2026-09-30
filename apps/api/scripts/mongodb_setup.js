@@ -957,6 +957,32 @@ dbRef.payment_intents.createIndex(
   }
 );
 
+// A guest session has at most one open QR and is paid at most once.
+dbRef.payment_intents.createIndex(
+  { session_id: 1 },
+  {
+    unique: true,
+    name: "payments_one_pending_per_session",
+    partialFilterExpression: { status: "PENDING" }
+  }
+);
+
+dbRef.payment_intents.createIndex(
+  { session_id: 1 },
+  {
+    unique: true,
+    name: "payments_one_paid_per_session",
+    partialFilterExpression: { status: "PAID" }
+  }
+);
+
+dbRef.payment_intents.createIndex(
+  { status: 1, expires_at: 1 },
+  {
+    name: "payments_status_expires"
+  }
+);
+
 
 /* WALLET HOLDS */
 
