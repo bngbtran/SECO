@@ -2,3 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+# Local config holds DB/JWT secrets; only the template is committed.
+.env
+.env.*
+!.env.example

@@ -7,7 +7,6 @@ import pytest
 from bson.decimal128 import Decimal128
 
 from app.core.exceptions import BusinessRuleError
-from app.db.indexes import create_indexes
 from app.db.mongodb import get_collection
 from app.main import app
 from app.modules.guest import realtime as guest_realtime
@@ -31,12 +30,6 @@ transactions = get_collection("transactions")
 
 def run(scenario):
     TEST_LOOP.run_until_complete(scenario())
-
-
-@pytest.fixture(scope="module", autouse=True)
-def indexes():
-    # The one-PENDING / one-PAID payment guarantees rely on these unique indexes.
-    TEST_LOOP.run_until_complete(create_indexes())
 
 
 @pytest.fixture
