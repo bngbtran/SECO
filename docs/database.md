@@ -24,7 +24,7 @@ To work offline against a local MongoDB instead, keep the default
 | `python -m app.db.migrate` | Apply pending migrations and list them |
 | `python -m app.db.migrate --status` | List migrations without applying |
 | `python -m app.db.seed` | Seed demo stations, accounts, RFID cards, vehicles |
-| `python -m app.db.seed --reset-passwords` | Also reset demo accounts to `SEED_PASSWORD` |
+| `python -m app.db.seed --reset-passwords` | Also reset every demo account's password to `seco` |
 | `python -m scripts.seed_user --email ... --name ... --role USER` | Create one extra account |
 | `python -m scripts.seed_rfid --email ... --uid ...` | Link another RFID UID (e.g. the Wokwi card) |
 | `python -m pytest` | Tests; same cluster as `MONGO_URI` but always the separate `seco_test` database, never `seco` |
@@ -68,20 +68,17 @@ Key rules enforced by indexes:
 
 Mock stations (`is_simulated: true`) exist for the map; no hardware backs them.
 
-| Account | Role | Balance | RFID UID | Vehicle |
-|---|---|---|---|---|
-| admin@seco.local | ADMIN | – | – | – |
-| tranbnb@seco.local (Bùi Ngọc Bảo Trân) | ADMIN, password `tran` | – | – | – |
-| tunv@seco.local (Nguyễn Văn Tú) | ADMIN, password `tu` | – | – | – |
-| nguyenlb@seco.local (Lê Bảo Nguyên) | ADMIN, password `nguyen` | – | – | – |
-| hieuln@seco.local (Lê Ngọc Hiếu) | ADMIN, password `hieu` | – | – | – |
-| tech@seco.local | TECHNICIAN | – | `7E1C2A9F` | – |
-| user@seco.local | USER | 200 000 | `A1B2C3D4` | 43A-123.45 VinFast VF e34 |
-| member2@seco.local | USER | 50 000 | `B2C3D4E5` (+ `D4E5F6A7` locked) | 43A-678.90 VinFast VF 5 |
-| member3@seco.local | USER | 0 | `C3D4E5F6` (+ 1 card pending registration) | 92A-111.22 VinFast VF 8 |
+All demo accounts use the password **`seco`**.
 
-Team admin accounts get their given name as default password (`tran`, `tu`,
-`nguyen`, `hieu`). Other new accounts get `SEED_PASSWORD` (default `Seco@2026`).
+| Account | Name | Role | Balance | RFID UID | Vehicle |
+|---|---|---|---|---|---|
+| admin@seco.com | SECO Admin | ADMIN | – | – | – |
+| tranbnb@seco.com | Bùi Ngọc Bảo Trân | ADMIN | – | – | – |
+| tunv@seco.com | Nguyễn Văn Tú | ADMIN | – | – | – |
+| nguyenlb@seco.com | Lê Bảo Nguyên | ADMIN | – | – | – |
+| hieuln@seco.com | Lê Ngọc Hiếu | ADMIN | – | – | – |
+| tech@seco.com | SECO Technician | TECHNICIAN | – | `7E1C2A9F` | – |
+| user@seco.com | SECO Member | USER | 200 000 | `A1B2C3D4` (+ `D4E5F6A7` locked, + 1 card pending registration) | 43A-123.45 VinFast VF e34 |
 
 ## Setting up the shared Atlas cluster (DB owner, once)
 

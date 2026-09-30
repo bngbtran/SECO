@@ -5,14 +5,15 @@ RFID cards and vehicles. Safe to re-run on the shared database:
 
 * runtime state (station status, current session, heartbeat, lock) is only set
   when a station is first created, so a running session is never clobbered;
-* existing accounts keep their password and balance unless --reset-passwords.
+* existing accounts keep their password and balance unless --reset-passwords;
+* accounts dropped from the demo set (RETIRED_EMAILS) are removed with their
+  RFID cards and vehicles, unless they already have charging history.
 
-The password for new demo accounts comes from SEED_PASSWORD (default below).
+Every demo account uses the password DEMO_PASSWORD.
 """
 
 import argparse
 import asyncio
-import os
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -21,7 +22,7 @@ from app.db.migrate import _redact
 from app.db.migrations import apply_migrations
 from app.db.mongodb import check_database, close_database, db
 
-DEFAULT_PASSWORD = "Seco@2026"
+DEMO_PASSWORD = "seco"
 
 # (station_id, name, address, lat, lng, simulated, status, is_online)
 STATIONS = [
@@ -45,36 +46,38 @@ STATIONS = [
      True, "ERROR", True),
 ]
 
-# (email, name, role, balance_vnd, password); password None = SEED_PASSWORD
+# (email, name, role, balance_vnd)
 USERS = [
-    ("admin@seco.local", "SECO Admin", "ADMIN", 0, None),
-    # Team members, one admin account each; default password = given name.
-    ("tranbnb@seco.local", "Bùi Ngọc Bảo Trân", "ADMIN", 0, "tran"),
-    ("tunv@seco.local", "Nguyễn Văn Tú", "ADMIN", 0, "tu"),
-    ("nguyenlb@seco.local", "Lê Bảo Nguyên", "ADMIN", 0, "nguyen"),
-    ("hieuln@seco.local", "Lê Ngọc Hiếu", "ADMIN", 0, "hieu"),
-    ("tech@seco.local", "SECO Technician", "TECHNICIAN", 0, None),
-    ("user@seco.local", "SECO User", "USER", 200_000, None),
-    ("member2@seco.local", "Trần Thị Bình", "USER", 50_000, None),
-    ("member3@seco.local", "Lê Văn Cường", "USER", 0, None),
+    ("admin@seco.com", "SECO Admin", "ADMIN", 0),
+    # Team members, one admin account each.
+    ("tranbnb@seco.com", "Bùi Ngọc Bảo Trân", "ADMIN", 0),
+    ("tunv@seco.com", "Nguyễn Văn Tú", "ADMIN", 0),
+    ("nguyenlb@seco.com", "Lê Bảo Nguyên", "ADMIN", 0),
+    ("hieuln@seco.com", "Lê Ngọc Hiếu", "ADMIN", 0),
+    ("tech@seco.com", "SECO Technician", "TECHNICIAN", 0),
+    ("user@seco.com", "SECO Member", "USER", 200_000),
 ]
+
+# Earlier versions of this seed used @seco.local; those accounts are renamed in
+# place so their user_id, balance, RFID cards and history are kept.
+LEGACY_DOMAIN = "@seco.local"
+
+# Demo accounts from earlier versions of this seed.
+RETIRED_EMAILS = ["member2@seco.local", "member3@seco.local"]
 
 # (card_id, uid, owner email, label, is_active, pending)
 RFID_CARDS = [
-    ("CARD-USER-01", "A1B2C3D4", "user@seco.local", "Thẻ chính", True, False),
-    ("CARD-MEMBER2-01", "B2C3D4E5", "member2@seco.local", "Thẻ chính", True, False),
-    ("CARD-MEMBER2-OLD", "D4E5F6A7", "member2@seco.local", "Thẻ cũ (đã khóa)", False, False),
-    ("CARD-MEMBER3-01", "C3D4E5F6", "member3@seco.local", "Thẻ chính (ví 0đ)", True, False),
-    ("CARD-TECH-01", "7E1C2A9F", "tech@seco.local", "Thẻ kỹ thuật viên", True, False),
+    ("CARD-USER-01", "A1B2C3D4", "user@seco.com", "Thẻ chính", True, False),
+    # Deactivated card: must be rejected at the station (FR01).
+    ("CARD-USER-OLD", "D4E5F6A7", "user@seco.com", "Thẻ cũ (đã khóa)", False, False),
     # Registration in progress (FR02): no UID until the card is scanned at a station.
-    ("CARD-MEMBER3-NEW", None, "member3@seco.local", "Thẻ đang đăng ký", True, True),
+    ("CARD-USER-NEW", None, "user@seco.com", "Thẻ đang đăng ký", True, True),
+    ("CARD-TECH-01", "7E1C2A9F", "tech@seco.com", "Thẻ kỹ thuật viên", True, False),
 ]
 
 # (vehicle_id, owner email, plate, brand, model, battery_kwh)
 VEHICLES = [
-    ("VEH-USER-01", "user@seco.local", "43A-123.45", "VinFast", "VF e34", 42.0),
-    ("VEH-MEMBER2-01", "member2@seco.local", "43A-678.90", "VinFast", "VF 5", 37.23),
-    ("VEH-MEMBER3-01", "member3@seco.local", "92A-111.22", "VinFast", "VF 8", 87.7),
+    ("VEH-USER-01", "user@seco.com", "43A-123.45", "VinFast", "VF e34", 42.0),
 ]
 
 
@@ -111,12 +114,28 @@ async def seed_stations() -> None:
     print(f"Stations: {len(STATIONS)} (1 real, {len(STATIONS) - 1} mock)")
 
 
-async def seed_users(password: str, reset_passwords: bool) -> dict[str, str]:
+async def rename_legacy_emails() -> None:
+    renamed = 0
+    for email, *_ in USERS:
+        legacy = email.split("@")[0] + LEGACY_DOMAIN
+        if await db.users.find_one({"email": email}, {"_id": 1}):
+            continue
+        result = await db.users.update_one(
+            {"email": legacy},
+            {"$set": {"email": email, "updated_at": now_utc()}},
+        )
+        renamed += result.modified_count
+
+    if renamed:
+        print(f"Renamed to new email domain: {renamed}")
+
+
+async def seed_users(reset_passwords: bool) -> dict[str, str]:
     now = now_utc()
-    shared_hash = hash_password(password)
+    password_hash = hash_password(DEMO_PASSWORD)
     ids = {}
 
-    for email, name, role, balance, own_password in USERS:
+    for email, name, role, balance in USERS:
         existing = await db.users.find_one({"email": email}, {"user_id": 1})
         user_id = existing["user_id"] if existing else str(uuid4())
         ids[email] = user_id
@@ -133,14 +152,46 @@ async def seed_users(password: str, reset_passwords: bool) -> dict[str, str]:
             },
         }
         if reset_passwords or not existing:
-            update["$set"]["password_hash"] = (
-                hash_password(own_password) if own_password else shared_hash
-            )
+            update["$set"]["password_hash"] = password_hash
 
         await db.users.update_one({"email": email}, update, upsert=True)
 
     print(f"Users: {len(USERS)}")
     return ids
+
+
+async def retire_users() -> None:
+    retired = 0
+    for email in RETIRED_EMAILS:
+        user = await db.users.find_one({"email": email}, {"user_id": 1})
+        if not user:
+            continue
+
+        user_id = user["user_id"]
+        has_history = await db.charging_sessions.find_one(
+            {"user_id": user_id},
+            {"_id": 1},
+        ) or await db.transactions.find_one({"user_id": user_id}, {"_id": 1})
+
+        if has_history:
+            # Keep the account so sessions and transactions stay consistent.
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"is_active": False, "updated_at": now_utc()}},
+            )
+            await db.rfid_cards.update_many(
+                {"user_id": user_id},
+                {"$set": {"is_active": False, "updated_at": now_utc()}},
+            )
+            print(f"Deactivated {email} (has charging history)")
+        else:
+            await db.rfid_cards.delete_many({"user_id": user_id})
+            await db.vehicles.delete_many({"user_id": user_id})
+            await db.users.delete_one({"user_id": user_id})
+        retired += 1
+
+    if retired:
+        print(f"Retired accounts: {retired}")
 
 
 async def seed_rfid_cards(user_ids: dict[str, str]) -> None:
@@ -195,14 +246,13 @@ async def main() -> None:
     parser.add_argument(
         "--reset-passwords",
         action="store_true",
-        help="also reset existing demo accounts to SEED_PASSWORD",
+        help=f"also reset existing demo accounts to the password {DEMO_PASSWORD!r}",
     )
     args = parser.parse_args()
 
     from app.core.config import get_settings
 
     settings = get_settings()
-    password = os.environ.get("SEED_PASSWORD", DEFAULT_PASSWORD)
     print(f"Database: {settings.mongo_database} @ {_redact(settings.mongo_uri)}")
 
     try:
@@ -210,14 +260,15 @@ async def main() -> None:
         await apply_migrations(db)
 
         await seed_stations()
-        user_ids = await seed_users(password, args.reset_passwords)
+        await rename_legacy_emails()
+        user_ids = await seed_users(args.reset_passwords)
+        await retire_users()
         await seed_rfid_cards(user_ids)
         await seed_vehicles(user_ids)
 
-        print("\nDemo accounts (password when first created):")
-        for email, _, role, _, own_password in USERS:
-            shown = f"'{own_password}'" if own_password else "SEED_PASSWORD"
-            print(f"  {role:<10} {email:<22} {shown}")
+        print(f"\nDemo accounts (password {DEMO_PASSWORD!r}):")
+        for email, name, role, _ in USERS:
+            print(f"  {role:<10} {email:<22} {name}")
     finally:
         await close_database()
 
