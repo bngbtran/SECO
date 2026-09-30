@@ -45,7 +45,7 @@ export default function UsersPage() {
         actions={
           <button className="btn btn-primary" onClick={() => setAdding(true)}>
             <UserPlus size={15} />
-            Thêm người dùng
+            Tạo member
           </button>
         }
       />
@@ -155,7 +155,8 @@ export default function UsersPage() {
           onClose={() => setAdding(false)}
           onSaved={(user) => {
             setAdding(false);
-            navigate(`/users/${user.user_id}`);
+            // Next step of onboarding: tap the member's RFID card on the desk reader.
+            navigate(`/users/${user.user_id}${user.role === "ADMIN" ? "" : "?assignCard=1"}`);
           }}
         />
       )}

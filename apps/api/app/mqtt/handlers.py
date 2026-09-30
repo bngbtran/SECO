@@ -7,6 +7,7 @@ from typing import Any
 
 from app.core.exceptions import SECOError
 from app.db.mongodb import get_collection
+from app.modules.admin.card_registration import handle_reader_message
 from app.modules.charging.constants import (
     ConnectorLock,
     SessionStatus,
@@ -42,6 +43,9 @@ logger = logging.getLogger(__name__)
 
 stations = get_collection("charging_stations")
 sessions = get_collection("charging_sessions")
+
+# Admin desk RFID reader (card registration), not a charging station.
+_READER_TOPIC_RE = re.compile(r"^seco/reader/(?P<reader_id>[^/]+)/(?P<kind>scan|hb|status)$")
 
 _TOPIC_RE = re.compile(
     r"^evcs/(?P<station_id>[^/]+)/(?P<kind>hb|telemetry|event|req|res|cmd|cmd_ack|status)$"
@@ -496,6 +500,10 @@ async def handle_message(
     topic: str,
     payload: bytes | str,
 ) -> dict[str, Any] | None:
+    reader = _READER_TOPIC_RE.match(topic)
+    if reader:
+        return await handle_reader_message(reader.group("reader_id"), reader.group("kind"), payload)
+
     parsed = parse_topic(topic)
     if parsed is None:
         logger.warning("Unknown MQTT topic: %s", topic)

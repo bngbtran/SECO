@@ -50,14 +50,26 @@ class MQTTService:
                 # aiomqtt v2 accepts these keyword arguments and is pinned <3 in pyproject.
                 async with aiomqtt.Client(**client_kwargs) as client:
                     self._client = client
+                    # Telemetry, events and status reach every instance so each
+                    # one can push realtime updates to its own WebSocket clients;
+                    # requests go to one instance only (shared subscription).
+                    requests = "evcs/+/req"
+                    scans = "seco/reader/+/scan"
+                    if settings.mqtt_share_group:
+                        requests = f"$share/{settings.mqtt_share_group}/{requests}"
+                        scans = f"$share/{settings.mqtt_share_group}/{scans}"
                     subscriptions = (
                         "evcs/+/hb",
                         "evcs/+/telemetry",
                         "evcs/+/event",
-                        "evcs/+/req",
+                        requests,
                         "evcs/+/cmd_ack",
                         "evcs/+/status",
                         "evcs/+/res",
+                        # Admin desk RFID reader (card registration).
+                        scans,
+                        "seco/reader/+/hb",
+                        "seco/reader/+/status",
                     )
                     for topic in subscriptions:
                         await client.subscribe(topic)

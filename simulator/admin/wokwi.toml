@@ -1,0 +1,6 @@
+# Wokwi for VS Code: run `./build.sh` first, then "Wokwi: Start Simulator".
+[wokwi]
+version = 1
+# Full flash image (bootloader + partitions + app) built by build.sh.
+firmware = "build/sketch.ino.merged.bin"
+elf = "build/sketch.ino.elf"

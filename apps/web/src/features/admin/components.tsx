@@ -344,7 +344,12 @@ export function UserFormDialog({
   };
 
   return (
-    <Dialog title={editing ? "Sửa người dùng" : "Thêm người dùng"} subtitle="users" icon={UserPlus} onClose={onClose}>
+    <Dialog
+      title={editing ? "Sửa người dùng" : "Tạo member"}
+      subtitle={editing ? "users" : "Bước 1/2: thông tin cơ bản · Bước 2/2: gán thẻ RFID"}
+      icon={UserPlus}
+      onClose={onClose}
+    >
       <form onSubmit={submit}>
         <Field label="Họ tên">
           <input className="input" value={form.name} onChange={set("name")} required />
@@ -381,7 +386,7 @@ export function UserFormDialog({
             Huỷ
           </button>
           <button className="btn btn-primary" disabled={busy}>
-            {editing ? "Lưu" : "Tạo người dùng"}
+            {editing ? "Lưu" : form.role === "ADMIN" ? "Tạo tài khoản" : "Tạo & gán thẻ"}
           </button>
         </div>
       </form>

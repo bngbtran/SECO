@@ -4,7 +4,6 @@ from app.db.mongodb import get_collection
 from app.modules.payment import topup_service
 from tests.shared_loop import TEST_LOOP
 
-
 users = get_collection("users")
 transactions = get_collection("transactions")
 

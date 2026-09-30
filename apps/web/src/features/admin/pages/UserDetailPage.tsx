@@ -7,13 +7,14 @@ import {
   Pencil,
   Receipt,
   Trash2,
+  RefreshCw,
   Unlink,
   UserCheck,
   UserX,
   Wallet,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../../../shared/api";
 import { fDay, initials, shortId, vnd } from "../../../shared/format";
@@ -23,10 +24,8 @@ import { useRealtimeRefresh } from "../../../shared/realtime";
 import type { AdminCard, AdminSession, AdminTransaction, AdminUserDetail, Page } from "../../../shared/types";
 import {
   Badge,
-  Dialog,
   Empty,
   ErrorBox,
-  Field,
   Kpi,
   Loading,
   Pager,
@@ -35,90 +34,9 @@ import {
   useToast,
 } from "../../../shared/ui";
 import { SessionTable, TransactionTable, UserFormDialog } from "../components";
+import { RegisterCardDialog } from "../RegisterCardDialog";
 
 type Tab = "cards" | "vehicles" | "sessions" | "tx" | "info";
-
-function LinkCardDialog({ userId, onClose, onDone }: { userId: string; onClose: () => void; onDone: () => void }) {
-  const toast = useToast();
-  const free = useApi<Page<AdminCard>>("/admin/rfid-cards", { status: "UNASSIGNED", limit: 100 });
-  const [mode, setMode] = useState<"existing" | "new">("existing");
-  const [cardId, setCardId] = useState("");
-  const [uid, setUid] = useState("");
-  const [label, setLabel] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      if (mode === "existing") {
-        if (!cardId) throw new Error("Chọn một thẻ");
-        const card = await api<AdminCard>(`/admin/rfid-cards/${cardId}/link`, { method: "PUT", body: { user_id: userId } });
-        toast("Đã gán thẻ", card.uid ?? card.card_id);
-      } else {
-        const card = await api<AdminCard>("/admin/rfid-cards", {
-          method: "POST",
-          body: { uid: uid.trim() || null, user_id: userId, label: label.trim() || null },
-        });
-        toast(card.pending ? "Đã tạo thẻ chờ quét UID" : "Đã thêm thẻ", card.uid ?? card.card_id);
-      }
-      onDone();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const options = free.data?.items ?? [];
-
-  return (
-    <Dialog title="Gán thẻ RFID" subtitle="Thẻ được gán sẽ dùng để bắt đầu sạc tại trạm" icon={CreditCard} onClose={onClose}>
-      <form onSubmit={submit}>
-        <div className="seg" style={{ marginBottom: 14 }}>
-          <button type="button" className={mode === "existing" ? "on" : ""} onClick={() => setMode("existing")}>
-            Thẻ chưa có chủ
-          </button>
-          <button type="button" className={mode === "new" ? "on" : ""} onClick={() => setMode("new")}>
-            Thẻ mới
-          </button>
-        </div>
-        {mode === "existing" ? (
-          <Field label="Thẻ" hint={options.length ? undefined : "Không có thẻ nào chưa gán chủ. Chuyển sang \"Thẻ mới\"."}>
-            <select className="select" value={cardId} onChange={(e) => setCardId(e.target.value)}>
-              <option value="">— Chọn thẻ —</option>
-              {options.map((c) => (
-                <option key={c.card_id} value={c.card_id}>
-                  {c.uid ?? "(chưa có UID)"} · {c.label ?? c.card_id}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : (
-          <>
-            <Field label="UID thẻ" hint="Để trống nếu chưa quét: thẻ ở trạng thái PENDING, chờ quét lần đầu tại trạm.">
-              <input className="input mono" value={uid} onChange={(e) => setUid(e.target.value)} placeholder="VD: A1B2C3D4" />
-            </Field>
-            <Field label="Nhãn">
-              <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="VD: Thẻ chính" />
-            </Field>
-          </>
-        )}
-        {error && <div className="err">{error}</div>}
-        <div className="df" style={{ padding: "8px 0 0" }}>
-          <button type="button" className="btn btn-outline" onClick={onClose}>
-            Huỷ
-          </button>
-          <button className="btn btn-primary" disabled={busy}>
-            Gán thẻ
-          </button>
-        </div>
-      </form>
-    </Dialog>
-  );
-}
 
 function UserSessions({ userId }: { userId: string }) {
   const [offset, setOffset] = useState(0);
@@ -154,12 +72,23 @@ export default function UserDetailPage() {
   const spent = useApi<Page<AdminTransaction>>("/admin/transactions", { user_id: userId, type: "CHARGING", limit: 200 });
   const [tab, setTab] = useState<Tab>("cards");
   const [editing, setEditing] = useState(false);
-  const [linking, setLinking] = useState(false);
+  // null = closed; { replace: card } = swap that card; { replace: null } = add a card.
+  const [scan, setScan] = useState<{ replace: AdminCard | null } | null>(null);
+  const [params, setParams] = useSearchParams();
 
   useRealtimeRefresh(detail.reload, (e) => e.user_id === userId && (e.event === "STOPPED" || e.event === "STARTED"));
 
-  if (detail.error) return <ErrorBox message={detail.error} onRetry={detail.reload} />;
   const u = detail.data;
+
+  // Right after "Tạo member" the page opens with ?assignCard=1: ask for the card straight away.
+  useEffect(() => {
+    if (u && params.get("assignCard") === "1") {
+      setParams({}, { replace: true });
+      if (u.role !== "ADMIN" && u.is_active) setScan({ replace: null });
+    }
+  }, [u, params, setParams]);
+
+  if (detail.error) return <ErrorBox message={detail.error} onRetry={detail.reload} />;
   if (!u) return <Loading />;
 
   const totalSpent = (spent.data?.items ?? []).reduce((a, t) => a + t.amount_vnd, 0);
@@ -272,12 +201,12 @@ export default function UserDetailPage() {
           <div className="card-b">
             <div className="between" style={{ marginBottom: 14 }}>
               <div className="muted" style={{ fontSize: 13 }}>
-                Mỗi thẻ có UID duy nhất. Quét thẻ hợp lệ tại trạm là hành động bắt đầu sạc.
+                Quẹt thẻ trên đầu đọc tại quầy để gán. Member dùng thẻ này quét tại trạm để bắt đầu sạc.
               </div>
-              {u.role !== "ADMIN" && (
-                <button className="btn btn-primary btn-sm" onClick={() => setLinking(true)} disabled={!u.is_active}>
+              {u.role !== "ADMIN" && u.cards.length > 0 && (
+                <button className="btn btn-outline btn-sm" onClick={() => setScan({ replace: null })} disabled={!u.is_active}>
                   <LinkIcon size={14} />
-                  Gán thẻ
+                  Gán thêm thẻ
                 </button>
               )}
             </div>
@@ -300,16 +229,39 @@ export default function UserDetailPage() {
                       <span>
                         {c.label ?? c.card_id} · {fDay(c.created_at)}
                       </span>
-                      <button className="btn btn-ghost btn-sm" onClick={() => unlink(c)} title="Gỡ link thẻ">
-                        <Unlink size={14} />
-                        Gỡ
-                      </button>
+                      <span className="row" style={{ gap: 2 }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setScan({ replace: c })}
+                          disabled={!u.is_active}
+                          title="Quét thẻ mới thay cho thẻ này"
+                        >
+                          <RefreshCw size={14} />
+                          Đổi thẻ
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => unlink(c)} title="Gỡ link thẻ">
+                          <Unlink size={14} />
+                          Gỡ
+                        </button>
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <Empty icon={CreditCard}>{u.role === "ADMIN" ? "Tài khoản admin không dùng thẻ RFID" : "Chưa có thẻ RFID"}</Empty>
+              <Empty icon={CreditCard}>
+                {u.role === "ADMIN" ? (
+                  "Tài khoản admin không dùng thẻ RFID"
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 12 }}>Member chưa có thẻ RFID nên chưa thể sạc bằng thẻ.</div>
+                    <button className="btn btn-primary" onClick={() => setScan({ replace: null })} disabled={!u.is_active}>
+                      <LinkIcon size={15} />
+                      Gán thẻ
+                    </button>
+                  </>
+                )}
+              </Empty>
             )}
           </div>
         )}
@@ -375,12 +327,15 @@ export default function UserDetailPage() {
           }}
         />
       )}
-      {linking && (
-        <LinkCardDialog
+      {scan && (
+        <RegisterCardDialog
           userId={u.user_id}
-          onClose={() => setLinking(false)}
+          userName={u.name}
+          replaceCard={scan.replace}
+          onClose={() => setScan(null)}
           onDone={() => {
-            setLinking(false);
+            setScan(null);
+            setTab("cards");
             void detail.reload();
           }}
         />
