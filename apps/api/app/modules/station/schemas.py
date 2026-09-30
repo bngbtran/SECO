@@ -11,3 +11,5 @@ class StationResponse(BaseModel):
     connector_lock: str
     current_session_id: str | None
     last_heartbeat_at: datetime | None = None
+    latitude: float | None = None
+    longitude: float | None = None

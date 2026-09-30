@@ -217,6 +217,18 @@ createOrUpdateCollection("charging_stations", {
       ]
     },
 
+    latitude: {
+      bsonType: ["double", "null"],
+      minimum: -90,
+      maximum: 90
+    },
+
+    longitude: {
+      bsonType: ["double", "null"],
+      minimum: -180,
+      maximum: 180
+    },
+
     created_at: {
       bsonType: "date"
     },
@@ -376,7 +388,10 @@ createOrUpdateCollection("transactions", {
     },
 
     session_id: {
-      bsonType: "string"
+      bsonType: [
+        "string",
+        "null"
+      ]
     },
 
     user_id: {
@@ -389,7 +404,8 @@ createOrUpdateCollection("transactions", {
     type: {
       enum: [
         "CHARGING",
-        "GUEST_PAYMENT"
+        "GUEST_PAYMENT",
+        "TOPUP"
       ]
     },
 
@@ -888,7 +904,9 @@ dbRef.transactions.createIndex(
   { session_id: 1, type: 1 },
   {
     unique: true,
-    name: "transactions_session_type_unique"
+    name: "transactions_session_type_unique",
+    // TOPUP transactions have no session_id and must not collide.
+    partialFilterExpression: { session_id: { $type: "string" } }
   }
 );
 

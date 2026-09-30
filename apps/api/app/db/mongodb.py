@@ -5,7 +5,7 @@ from pymongo import AsyncMongoClient
 from app.core.config import get_settings
 
 settings = get_settings()
-client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(settings.mongo_uri)
+client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(settings.mongo_uri, tz_aware=True)
 db = client[settings.mongo_database]
 
 

@@ -6,19 +6,15 @@ from bson.decimal128 import Decimal128
 
 from app.db.mongodb import get_collection
 from app.modules.billing.settlement import settle_member_session
-from app.modules.billing.wallet import create_member_hold
 from app.modules.charging.constants import SessionStatus, SessionType
 from app.modules.charging.service import complete_session
+from tests.shared_loop import TEST_LOOP
 
 users = get_collection("users")
 sessions = get_collection("charging_sessions")
 wallet_holds = get_collection("wallet_holds")
 transactions = get_collection("transactions")
 stations = get_collection("charging_stations")
-
-_test_loop = asyncio.new_event_loop()
-
-
 
 def test_member_settlement_is_atomic_and_idempotent():
     async def scenario():
@@ -77,20 +73,6 @@ def test_member_settlement_is_atomic_and_idempotent():
                 }
             )
 
-            hold = await create_member_hold(
-                user_id=user_id,
-                session_id=session_id,
-                amount_vnd=50_000,
-            )
-
-            user = await users.find_one(
-                {"user_id": user_id},
-                {"_id": 0, "balance_vnd": 1, "held_balance_vnd": 1},
-            )
-            assert user["balance_vnd"] == 200_000
-            assert user["held_balance_vnd"] == 50_000
-            assert hold["status"] == "HOLDING"
-
             await complete_session(
                 session_id=session_id,
                 stop_reason="UNPLUG",
@@ -111,12 +93,6 @@ def test_member_settlement_is_atomic_and_idempotent():
             )
             assert user["balance_vnd"] == 199_995
             assert user["held_balance_vnd"] == 0
-
-            stored_hold = await wallet_holds.find_one(
-                {"session_id": session_id},
-                {"_id": 0},
-            )
-            assert stored_hold["status"] == "RELEASED"
 
             transaction2 = await settle_member_session(
                 session_id=session_id,
@@ -146,7 +122,7 @@ def test_member_settlement_is_atomic_and_idempotent():
             await stations.delete_many({"station_id": station_id})
             await users.delete_many({"user_id": user_id})
 
-    _test_loop.run_until_complete(scenario())
+    TEST_LOOP.run_until_complete(scenario())
 
 
 def test_member_settlement_concurrent_calls_charge_once():
@@ -206,12 +182,6 @@ def test_member_settlement_concurrent_calls_charge_once():
                 }
             )
 
-            await create_member_hold(
-                user_id=user_id,
-                session_id=session_id,
-                amount_vnd=50_000,
-            )
-
             await complete_session(
                 session_id=session_id,
                 stop_reason="UNPLUG",
@@ -254,4 +224,4 @@ def test_member_settlement_concurrent_calls_charge_once():
             await stations.delete_many({"station_id": station_id})
             await users.delete_many({"user_id": user_id})
 
-    _test_loop.run_until_complete(scenario())
+    TEST_LOOP.run_until_complete(scenario())

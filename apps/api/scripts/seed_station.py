@@ -17,6 +17,8 @@ async def main() -> None:
                 "connector_lock": "UNLOCKED",
                 "current_session_id": None,
                 "last_heartbeat_at": None,
+                "latitude": 16.0544,
+                "longitude": 108.2022,
                 "updated_at": now,
             },
             "$setOnInsert": {

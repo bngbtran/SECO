@@ -1,5 +1,6 @@
 from typing import Annotated
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -10,31 +11,42 @@ bearer = HTTPBearer(auto_error=True)
 users = get_collection("users")
 
 
-async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)],
-):
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def user_from_token(token: str) -> dict:
+    """Resolve a JWT to its user, rejecting expired, revoked or orphaned tokens."""
     try:
-        payload = decode_access_token(credentials.credentials)
-        user_id = payload.get("sub")
-        if not user_id:
-            raise ValueError("missing subject")
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
+        payload = decode_access_token(token)
+    except jwt.PyJWTError as exc:
+        raise _unauthorized("Invalid or expired token") from exc
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise _unauthorized("Invalid or expired token")
 
     user = await users.find_one(
         {"user_id": user_id},
-        {"_id": 0},
+        {"_id": 0, "password_hash": 0},
     )
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _unauthorized("User not found")
+
+    if int(payload.get("ver", 0)) != int(user.get("token_version", 0)):
+        raise _unauthorized("Token has been revoked")
+
+    return user
+
+
+async def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)],
+):
+    user = await user_from_token(credentials.credentials)
     if not user.get("is_active", False):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -63,5 +75,10 @@ async def require_technician(user: CurrentUser):
     return await require_role("TECHNICIAN", user)
 
 
+async def require_member(user: CurrentUser):
+    return await require_role("USER", user)
+
+
 CurrentAdmin = Annotated[dict, Depends(require_admin)]
 CurrentTechnician = Annotated[dict, Depends(require_technician)]
+CurrentMember = Annotated[dict, Depends(require_member)]

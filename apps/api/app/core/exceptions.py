@@ -12,3 +12,7 @@ class ConflictError(SECOError):
 
 class BusinessRuleError(SECOError):
     pass
+
+
+class FeatureDisabledError(SECOError):
+    pass

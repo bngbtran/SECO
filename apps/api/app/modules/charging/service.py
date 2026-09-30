@@ -10,7 +10,6 @@ from app.core.config import get_settings
 from app.core.exceptions import BusinessRuleError, ConflictError, ResourceNotFoundError
 from app.db.mongodb import get_collection
 from app.modules.billing.service import effective_budget
-from app.modules.billing.wallet import create_member_hold
 from app.modules.charging.constants import (
     SessionStatus,
     SessionType,
@@ -29,14 +28,30 @@ OPEN_SESSION_STATUSES = (
     SessionStatus.WAITING_PAYMENT.value,
 )
 
+_STOP_REASON_ALIASES = {
+    "UNPLUGGED": StopReason.UNPLUG.value,
+    "MAX_BUDGET_REACHED": StopReason.MAX_BUDGET.value,
+    "INSUFFICIENT_FUNDS": StopReason.INSUFFICIENT_BALANCE.value,
+    "OVERHEAT": StopReason.OVER_TEMPERATURE.value,
+    "OVER_TEMP": StopReason.OVER_TEMPERATURE.value,
+    "ESTOP": StopReason.E_STOP.value,
+    "E-STOP": StopReason.E_STOP.value,
+}
+
 
 def now_utc() -> datetime:
     return datetime.now(UTC)
 
 
 def normalize_stop_reason(stop_reason: str | StopReason) -> str:
+    if isinstance(stop_reason, StopReason):
+        return stop_reason.value
+
+    normalized = str(stop_reason).strip().upper()
+    normalized = _STOP_REASON_ALIASES.get(normalized, normalized)
+
     try:
-        return StopReason(stop_reason).value
+        return StopReason(normalized).value
     except ValueError as exc:
         raise BusinessRuleError(f"Invalid stop reason: {stop_reason}") from exc
 
@@ -61,6 +76,48 @@ async def get_open_session_for_user(user_id: str) -> dict | None:
     )
 
 
+async def _ensure_station_available(station_id: str) -> dict:
+    station = await stations.find_one(
+        {"station_id": station_id},
+        {"_id": 0},
+    )
+    if not station:
+        raise ResourceNotFoundError("Station not found")
+
+    if station.get("status") != StationStatus.READY.value:
+        raise ConflictError("Station is not READY")
+
+    if not station.get("is_online", False):
+        raise ConflictError("Station is offline")
+
+    if station.get("current_session_id") or await get_open_session_for_station(station_id):
+        raise ConflictError("Station already has an open session")
+
+    return station
+
+
+def resolve_member_budget(
+    balance_vnd: int,
+    max_budget_vnd: int | None,
+) -> int:
+    """Return the budget the session is capped at (DD 3.1).
+
+    No explicit budget means the member can charge up to the whole balance.
+    """
+    if max_budget_vnd is not None and max_budget_vnd <= 0:
+        raise BusinessRuleError("max_budget_vnd must be greater than 0")
+
+    try:
+        effective = effective_budget(balance_vnd, max_budget_vnd)
+    except ValueError as exc:
+        raise BusinessRuleError(str(exc)) from exc
+
+    if effective <= 0:
+        raise BusinessRuleError("Insufficient balance")
+
+    return effective
+
+
 async def validate_member_start(
     *,
     user_id: str,
@@ -80,37 +137,15 @@ async def validate_member_start(
     if user.get("role") != "USER":
         raise BusinessRuleError("Only USER can start member charging")
 
-    station = await stations.find_one(
-        {"station_id": station_id},
-        {"_id": 0},
+    effective = resolve_member_budget(
+        int(user.get("balance_vnd", 0)),
+        max_budget_vnd,
     )
-    if not station:
-        raise ResourceNotFoundError("Station not found")
 
-    if station.get("status") != StationStatus.READY.value:
-        raise BusinessRuleError("Station is not READY")
+    await _ensure_station_available(station_id)
 
-    if not station.get("is_online", False):
-        raise BusinessRuleError("Station is offline")
-
-    open_station_session = await get_open_session_for_station(station_id)
-    if open_station_session:
-        raise ConflictError("Station already has an open session")
-
-    current_user_session = await get_open_session_for_user(user_id)
-    if current_user_session:
+    if await get_open_session_for_user(user_id):
         raise ConflictError("User already has an open session")
-
-    try:
-        effective = effective_budget(
-            int(user.get("balance_vnd", 0)),
-            max_budget_vnd,
-        )
-    except ValueError as exc:
-        raise BusinessRuleError(str(exc)) from exc
-
-    if effective <= 0:
-        raise BusinessRuleError("Insufficient balance")
 
     return user, effective
 
@@ -120,81 +155,25 @@ async def validate_guest_start(
     station_id: str,
     max_budget_vnd: int | None,
 ) -> int | None:
-    station = await stations.find_one(
-        {"station_id": station_id},
-        {"_id": 0},
-    )
-    if not station:
-        raise ResourceNotFoundError("Station not found")
+    if max_budget_vnd is not None and max_budget_vnd <= 0:
+        raise BusinessRuleError("max_budget_vnd must be greater than 0")
 
-    if station.get("status") != StationStatus.READY.value:
-        raise BusinessRuleError("Station is not READY")
-
-    if not station.get("is_online", False):
-        raise BusinessRuleError("Station is offline")
-
-    open_station_session = await get_open_session_for_station(station_id)
-    if open_station_session:
-        raise ConflictError("Station already has an open session")
-
-    if max_budget_vnd is not None and max_budget_vnd < 0:
-        raise BusinessRuleError("max_budget_vnd must be >= 0")
+    await _ensure_station_available(station_id)
 
     return max_budget_vnd
 
 
-async def create_session_document(
+def build_session_document(
     *,
     station_id: str,
     session_type: SessionType,
     user_id: str | None,
     max_budget_vnd: int | None,
 ) -> dict:
-    if session_type == SessionType.MEMBER:
-        if not user_id:
-            raise BusinessRuleError("MEMBER session requires user_id")
-
-        user = await users.find_one(
-            {"user_id": user_id},
-            {"_id": 0},
-        )
-        if not user:
-            raise ResourceNotFoundError("User not found")
-
-        if not user.get("is_active"):
-            raise BusinessRuleError("User is inactive")
-
-        if user.get("role") != "USER":
-            raise BusinessRuleError("Only USER can create MEMBER session")
-
-        try:
-            effective = effective_budget(
-                int(user.get("balance_vnd", 0)),
-                max_budget_vnd,
-            )
-        except ValueError as exc:
-            raise BusinessRuleError(str(exc)) from exc
-
-        if effective <= 0:
-            raise BusinessRuleError("Insufficient balance")
-
-        max_budget_vnd = effective
-
-    elif session_type == SessionType.GUEST:
-        if user_id is not None:
-            raise BusinessRuleError("GUEST session cannot have user_id")
-
-        if max_budget_vnd is not None and max_budget_vnd < 0:
-            raise BusinessRuleError("max_budget_vnd must be >= 0")
-
-    else:
-        raise BusinessRuleError("Unsupported session type")
-
-    session_id = str(uuid4())
     now = now_utc()
 
-    document = {
-        "session_id": session_id,
+    return {
+        "session_id": str(uuid4()),
         "station_id": station_id,
         "type": session_type.value,
         "user_id": user_id,
@@ -202,6 +181,7 @@ async def create_session_document(
         "max_budget_vnd": max_budget_vnd,
         "energy_kwh": Decimal128("0"),
         "power_kw": Decimal128(str(settings.energy_power_kw_decimal)),
+        # Snapshot so history does not change when the tariff changes (DD 5).
         "price_per_kwh_vnd": settings.price_per_kwh_vnd,
         "cost_vnd": 0,
         "stop_reason": None,
@@ -212,6 +192,29 @@ async def create_session_document(
         "updated_at": now,
     }
 
+
+async def _release_station(station_id: str, session_id: str) -> None:
+    await stations.update_one(
+        {
+            "station_id": station_id,
+            "status": StationStatus.CHARGING.value,
+            "current_session_id": session_id,
+        },
+        {
+            "$set": {
+                "status": StationStatus.READY.value,
+                "current_session_id": None,
+                "updated_at": now_utc(),
+            }
+        },
+    )
+
+
+async def insert_session(document: dict) -> dict:
+    station_id = document["station_id"]
+    session_id = document["session_id"]
+
+    # Claim the station first so two concurrent starts cannot both win.
     station_result = await stations.update_one(
         {
             "station_id": station_id,
@@ -223,7 +226,7 @@ async def create_session_document(
             "$set": {
                 "status": StationStatus.CHARGING.value,
                 "current_session_id": session_id,
-                "updated_at": now,
+                "updated_at": now_utc(),
             }
         },
     )
@@ -234,36 +237,10 @@ async def create_session_document(
     try:
         await sessions.insert_one(document)
     except DuplicateKeyError as exc:
-        await stations.update_one(
-            {
-                "station_id": station_id,
-                "status": StationStatus.CHARGING.value,
-                "current_session_id": session_id,
-            },
-            {
-                "$set": {
-                    "status": StationStatus.READY.value,
-                    "current_session_id": None,
-                    "updated_at": now_utc(),
-                }
-            },
-        )
+        await _release_station(station_id, session_id)
         raise ConflictError("An open charging session already exists") from exc
     except Exception:
-        await stations.update_one(
-            {
-                "station_id": station_id,
-                "status": StationStatus.CHARGING.value,
-                "current_session_id": session_id,
-            },
-            {
-                "$set": {
-                    "status": StationStatus.READY.value,
-                    "current_session_id": None,
-                    "updated_at": now_utc(),
-                }
-            },
-        )
+        await _release_station(station_id, session_id)
         raise
 
     return document
@@ -281,43 +258,15 @@ async def create_member_session(
         max_budget_vnd=max_budget_vnd,
     )
 
-    document = await create_session_document(
+    document = build_session_document(
         station_id=station_id,
         session_type=SessionType.MEMBER,
         user_id=user_id,
         max_budget_vnd=effective,
     )
+    document["budget_mode"] = "EXPLICIT" if max_budget_vnd is not None else "BALANCE"
 
-    try:
-        await create_member_hold(
-            user_id=user_id,
-            session_id=document["session_id"],
-            amount_vnd=effective,
-        )
-    except Exception:
-        await sessions.delete_one(
-            {
-                "session_id": document["session_id"],
-                "status": SessionStatus.ACTIVE.value,
-            }
-        )
-        await stations.update_one(
-            {
-                "station_id": station_id,
-                "status": StationStatus.CHARGING.value,
-                "current_session_id": document["session_id"],
-            },
-            {
-                "$set": {
-                    "status": StationStatus.READY.value,
-                    "current_session_id": None,
-                    "updated_at": now_utc(),
-                }
-            },
-        )
-        raise
-
-    return document
+    return await insert_session(document)
 
 
 async def create_guest_session(
@@ -330,12 +279,14 @@ async def create_guest_session(
         max_budget_vnd=max_budget_vnd,
     )
 
-    return await create_session_document(
+    document = build_session_document(
         station_id=station_id,
         session_type=SessionType.GUEST,
         user_id=None,
         max_budget_vnd=effective,
     )
+
+    return await insert_session(document)
 
 
 def ensure_tick_within_budget(
@@ -354,13 +305,40 @@ def ensure_tick_within_budget(
 
     next_cost_vnd = current_cost_vnd + cost_delta_vnd
 
-    if (
-        max_budget_vnd is not None
-        and next_cost_vnd > max_budget_vnd
-    ):
+    if max_budget_vnd is not None and next_cost_vnd > max_budget_vnd:
         raise BusinessRuleError("Charging tick would exceed max budget")
 
     return next_cost_vnd
+
+
+async def set_session_usage(
+    *,
+    session_id: str,
+    energy_kwh: Decimal,
+    cost_vnd: int,
+) -> dict | None:
+    """Overwrite the accumulated usage of an ACTIVE session (idempotent)."""
+    if energy_kwh < 0:
+        raise ValueError("energy_kwh must be >= 0")
+
+    if cost_vnd < 0:
+        raise ValueError("cost_vnd must be >= 0")
+
+    return await sessions.find_one_and_update(
+        {
+            "session_id": session_id,
+            "status": SessionStatus.ACTIVE.value,
+        },
+        {
+            "$set": {
+                "energy_kwh": Decimal128(str(energy_kwh)),
+                "cost_vnd": cost_vnd,
+                "updated_at": now_utc(),
+            },
+        },
+        projection={"_id": 0},
+        return_document=ReturnDocument.AFTER,
+    )
 
 
 async def add_energy_tick(
@@ -375,15 +353,12 @@ async def add_energy_tick(
     if cost_delta_vnd < 0:
         raise ValueError("cost_delta_vnd must be >= 0")
 
-    now = now_utc()
-
     result = await sessions.find_one_and_update(
         {
             "session_id": session_id,
             "status": SessionStatus.ACTIVE.value,
             "$or": [
                 {"max_budget_vnd": None},
-                {"max_budget_vnd": {"$exists": False}},
                 {
                     "$expr": {
                         "$lte": [
@@ -400,7 +375,7 @@ async def add_energy_tick(
                 "cost_vnd": cost_delta_vnd,
             },
             "$set": {
-                "updated_at": now,
+                "updated_at": now_utc(),
             },
         },
         projection={"_id": 0},
@@ -412,29 +387,17 @@ async def add_energy_tick(
 
     session = await sessions.find_one(
         {"session_id": session_id},
-        {
-            "_id": 0,
-            "status": 1,
-            "cost_vnd": 1,
-            "max_budget_vnd": 1,
-        },
+        {"_id": 0, "status": 1, "cost_vnd": 1, "max_budget_vnd": 1},
     )
 
-    if not session:
+    if not session or session.get("status") != SessionStatus.ACTIVE.value:
         return None
 
-    if session.get("status") != SessionStatus.ACTIVE.value:
-        return None
-
-    current_cost_vnd = int(session.get("cost_vnd", 0))
-    max_budget_vnd = session.get("max_budget_vnd")
-
-    if (
-        max_budget_vnd is not None
-        and current_cost_vnd + cost_delta_vnd > int(max_budget_vnd)
-    ):
-        raise BusinessRuleError("Charging tick would exceed max budget")
-
+    ensure_tick_within_budget(
+        int(session.get("cost_vnd", 0)),
+        cost_delta_vnd,
+        session.get("max_budget_vnd"),
+    )
     return None
 
 
@@ -445,14 +408,7 @@ async def mark_session_waiting_payment(
 ) -> dict:
     reason = normalize_stop_reason(stop_reason)
 
-    if reason not in {
-        StopReason.UNPLUG.value,
-        StopReason.MAX_BUDGET.value,
-        StopReason.INSUFFICIENT_BALANCE.value,
-        StopReason.OVER_TEMPERATURE.value,
-        StopReason.E_STOP.value,
-        StopReason.SYSTEM_ERROR.value,
-    }:
+    if reason == StopReason.TECHNICIAN.value:
         raise BusinessRuleError(
             f"Stop reason {reason} cannot move session to WAITING_PAYMENT"
         )
@@ -488,43 +444,41 @@ async def complete_session(
     *,
     session_id: str,
     stop_reason: str | StopReason,
+    final_station_status: str | StationStatus = StationStatus.READY,
 ) -> dict:
     reason = normalize_stop_reason(stop_reason)
+    station_status = StationStatus(final_station_status).value
     now = now_utc()
 
     session = await sessions.find_one(
-        {
-            "session_id": session_id,
-            "status": {
-                "$in": [
-                    SessionStatus.ACTIVE.value,
-                    SessionStatus.WAITING_PAYMENT.value,
-                ],
-            },
-        },
+        {"session_id": session_id},
         {"_id": 0},
     )
 
     if not session:
-        raise ResourceNotFoundError("Open session not found")
+        raise ResourceNotFoundError("Charging session not found")
 
-    ended_at = session.get("ended_at") or now
+    if session.get("status") == SessionStatus.COMPLETED.value:
+        return session
+
+    if session.get("status") not in OPEN_SESSION_STATUSES:
+        raise BusinessRuleError(
+            f"Cannot complete session in status {session.get('status')}"
+        )
+
+    # A guest session keeps the stop reason recorded when it started waiting for payment.
+    keep_reason = session.get("status") == SessionStatus.WAITING_PAYMENT.value
 
     result = await sessions.find_one_and_update(
         {
             "session_id": session_id,
-            "status": {
-                "$in": [
-                    SessionStatus.ACTIVE.value,
-                    SessionStatus.WAITING_PAYMENT.value,
-                ],
-            },
+            "status": {"$in": OPEN_SESSION_STATUSES},
         },
         {
             "$set": {
                 "status": SessionStatus.COMPLETED.value,
-                "stop_reason": reason,
-                "ended_at": ended_at,
+                "stop_reason": session.get("stop_reason") if keep_reason else reason,
+                "ended_at": session.get("ended_at") or now,
                 "connector_locked": False,
                 "updated_at": now,
             }
@@ -534,32 +488,24 @@ async def complete_session(
     )
 
     if not result:
+        # Unplug, budget stop and the ticker can race; the first one wins.
+        latest = await sessions.find_one({"session_id": session_id}, {"_id": 0})
+        if latest and latest.get("status") == SessionStatus.COMPLETED.value:
+            return latest
         raise ConflictError("Session was completed by another request")
 
-    station_result = await stations.update_one(
+    await stations.update_one(
         {
             "station_id": result["station_id"],
             "current_session_id": session_id,
         },
         {
             "$set": {
-                "status": StationStatus.READY.value,
+                "status": station_status,
                 "current_session_id": None,
                 "updated_at": now,
             }
         },
     )
-
-    if station_result.matched_count != 1:
-        station = await stations.find_one(
-            {"station_id": result["station_id"]},
-            {"_id": 0, "status": 1, "current_session_id": 1},
-        )
-        if not (
-            station
-            and station.get("status") == StationStatus.READY.value
-            and station.get("current_session_id") is None
-        ):
-            raise ConflictError("Station/session state could not be finalized")
 
     return result
