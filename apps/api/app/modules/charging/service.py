@@ -285,6 +285,8 @@ async def create_guest_session(
         user_id=None,
         max_budget_vnd=effective,
     )
+    # Guests have no wallet: without a budget they charge until they unplug.
+    document["budget_mode"] = "EXPLICIT" if effective is not None else "NONE"
 
     return await insert_session(document)
 

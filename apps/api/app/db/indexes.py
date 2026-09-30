@@ -123,6 +123,25 @@ async def create_indexes() -> None:
         [("session_id", ASCENDING)],
         name="payments_session",
     )
+    await _ensure_index(
+        db.payment_intents,
+        [("session_id", ASCENDING)],
+        unique=True,
+        name="payments_one_pending_per_session",
+        partialFilterExpression={"status": "PENDING"},
+    )
+    await _ensure_index(
+        db.payment_intents,
+        [("session_id", ASCENDING)],
+        unique=True,
+        name="payments_one_paid_per_session",
+        partialFilterExpression={"status": "PAID"},
+    )
+    await _ensure_index(
+        db.payment_intents,
+        [("status", ASCENDING), ("expires_at", ASCENDING)],
+        name="payments_status_expires",
+    )
 
     await _ensure_index(
         db.wallet_holds,

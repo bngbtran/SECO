@@ -7,6 +7,7 @@ class StationResponse(BaseModel):
     station_id: str
     name: str
     status: str
+    availability: str
     is_online: bool
     connector_lock: str
     current_session_id: str | None

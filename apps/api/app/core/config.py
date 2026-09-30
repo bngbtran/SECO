@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     demo_topup_enabled: bool = False
     demo_topup_max_vnd: int = 10_000_000
 
+    guest_max_budget_vnd: int = 1_000_000
+    guest_payment_ttl_seconds: int = 300
+    # The QR encodes <base>/<payment_id>; the web app serves the sandbox payment page there.
+    guest_payment_url_base: str = "http://localhost:5173/pay"
+
     model_config = SettingsConfigDict(
         env_file=API_ROOT / ".env",
         case_sensitive=False,

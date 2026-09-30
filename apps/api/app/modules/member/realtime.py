@@ -1,43 +1,22 @@
-import asyncio
 import logging
 from typing import Any
-
-from bson.decimal128 import Decimal128
-from fastapi.encoders import jsonable_encoder
 
 from app.core.config import get_settings
 from app.db.mongodb import get_collection
 from app.modules.charging.constants import StationStatus, StopReason
+from app.modules.charging.realtime import publish_station_command, to_jsonable
 from app.modules.member.service import (
     list_active_member_sessions,
     process_member_session,
     session_live_fields,
     stop_member_session,
 )
-from app.mqtt import topics
 from app.websocket.manager import manager
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 stations = get_collection("charging_stations")
-
-
-def to_jsonable(value: Any) -> Any:
-    return jsonable_encoder(
-        value,
-        custom_encoder={Decimal128: lambda v: float(v.to_decimal())},
-    )
-
-
-async def publish_station_command(station_id: str, payload: dict[str, Any]) -> None:
-    # Imported lazily: app.mqtt.client imports the MQTT handlers, which import this module.
-    from app.mqtt.client import mqtt_service
-
-    try:
-        await mqtt_service.publish(topics.command(station_id), to_jsonable(payload))
-    except RuntimeError:
-        logger.warning("MQTT not connected; command not sent station=%s", station_id)
 
 
 def session_event(
@@ -137,15 +116,3 @@ async def tick_active_sessions() -> None:
                 await broadcast_session(result["session"], "TICK")
         except Exception:
             logger.exception("Session tick failed session=%s", session.get("session_id"))
-
-
-async def run_session_ticker() -> None:
-    while True:
-        try:
-            await tick_active_sessions()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Session ticker failed")
-
-        await asyncio.sleep(settings.session_ticker_interval_seconds)
