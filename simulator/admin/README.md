@@ -39,8 +39,16 @@ type a hex UID + Enter in the Serial Monitor.
 
 LEDs: green = connected to MQTT, yellow = waiting for a card, red = last card refused.
 
-Wiring (ESP32-S3): MFRC522 SDA→GPIO10, MOSI→11, SCK→12, MISO→13, RST→14,
-3.3V→3V3, GND→GND; LCD I2C SDA→GPIO8, SCL→9.
+Wiring (ESP32-S3), one wire per ESP32 pin:
+
+| ESP32-S3 | Goes to |
+|---|---|
+| 3V3 | breadboard `tp` rail (3.3 V) → MFRC522 3.3V |
+| 5V | breadboard `bp` rail (5 V) → LCD VCC |
+| GND.1 / GND.2 | breadboard `tn` / `bn` rails → MFRC522 GND, LCD GND, LED resistors |
+| GPIO 10, 11, 12, 13, 14 | MFRC522 SDA, MOSI, SCK, MISO, RST |
+| GPIO 8, 9 | LCD SDA, SCL |
+| GPIO 15, 16, 17 | green / yellow / red LED on the breadboard (220 Ω to `bn`) |
 
 ## Run it (Wokwi for VS Code)
 
@@ -97,7 +105,7 @@ request expires after 90 s. REST endpoints: `/api/v1/admin/card-registrations`.
 | File | Purpose |
 |---|---|
 | `sketch.ino` | Reader firmware (Arduino, ESP32-S3) |
-| `diagram.json` | Wokwi circuit: ESP32-S3, MFRC522 RFID reader, LCD 16x2 I2C, 3 LEDs |
+| `diagram.json` | Wokwi circuit: ESP32-S3, half breadboard with the LEDs and power rails, MFRC522, LCD 16x2 I2C |
 | `wokwi.toml` | Points Wokwi for VS Code to the built firmware in `build/` |
 | `build.sh` | Builds the firmware with arduino-cli |
 | `libraries.txt` | Library list for the Wokwi web editor |

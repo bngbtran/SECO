@@ -3,54 +3,93 @@
   "author": "SECO team - admin desk RFID reader",
   "editor": "wokwi",
   "parts": [
-    { "type": "board-esp32-s3-devkitc-1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "board-esp32-s3-devkitc-1", "id": "esp", "top": 86.4, "left": -24, "attrs": {} },
+    { "type": "wokwi-breadboard-half", "id": "bb1", "top": 120, "left": 180, "attrs": {} },
     {
       "type": "wokwi-lcd1602",
       "id": "lcd",
-      "top": -140,
-      "left": 150,
+      "top": -112,
+      "left": 189,
       "attrs": { "pins": "i2c", "i2cAddress": "0x27" }
     },
     {
       "type": "board-mfrc522",
       "id": "rfid",
-      "top": 40,
-      "left": 260,
+      "top": 108,
+      "left": 532,
+      "rotate": 90,
       "attrs": { "uid": "A1:B2:C3:D4" }
     },
-    { "type": "wokwi-led", "id": "ledOnline", "top": 250, "left": -120, "attrs": { "color": "green", "label": "ONLINE" } },
-    { "type": "wokwi-led", "id": "ledWait", "top": 250, "left": -80, "attrs": { "color": "yellow", "label": "WAIT" } },
-    { "type": "wokwi-led", "id": "ledError", "top": 250, "left": -40, "attrs": { "color": "red", "label": "ERROR" } },
-    { "type": "wokwi-resistor", "id": "r1", "top": 320, "left": -130, "rotate": 90, "attrs": { "value": "220" } },
-    { "type": "wokwi-resistor", "id": "r2", "top": 320, "left": -90, "rotate": 90, "attrs": { "value": "220" } },
-    { "type": "wokwi-resistor", "id": "r3", "top": 320, "left": -50, "rotate": 90, "attrs": { "value": "220" } }
+    {
+      "type": "wokwi-led",
+      "id": "ledOnline",
+      "top": 129,
+      "left": 229,
+      "attrs": { "color": "green", "label": "ONLINE" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledWait",
+      "top": 129,
+      "left": 286.6,
+      "attrs": { "color": "yellow", "label": "WAIT" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledError",
+      "top": 129,
+      "left": 344.2,
+      "attrs": { "color": "red", "label": "ERROR" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 204.6,
+      "left": 215.05,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": 204.6,
+      "left": 272.65,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r3",
+      "top": 204.6,
+      "left": 330.25,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
     [ "esp:RX", "$serialMonitor:TX", "", [] ],
-
-    [ "lcd:GND", "esp:GND.1", "black", [] ],
-    [ "lcd:VCC", "esp:5V", "red", [] ],
-    [ "lcd:SDA", "esp:8", "blue", [] ],
-    [ "lcd:SCL", "esp:9", "gold", [] ],
-
-    [ "rfid:3.3V", "esp:3V3.1", "red", [] ],
-    [ "rfid:GND", "esp:GND.2", "black", [] ],
-    [ "rfid:RST", "esp:14", "white", [] ],
-    [ "rfid:SDA", "esp:10", "orange", [] ],
-    [ "rfid:MOSI", "esp:11", "green", [] ],
-    [ "rfid:SCK", "esp:12", "purple", [] ],
-    [ "rfid:MISO", "esp:13", "blue", [] ],
-
-    [ "esp:15", "ledOnline:A", "green", [] ],
-    [ "ledOnline:C", "r1:1", "black", [] ],
-    [ "r1:2", "esp:GND.1", "black", [] ],
-    [ "esp:16", "ledWait:A", "gold", [] ],
-    [ "ledWait:C", "r2:1", "black", [] ],
-    [ "r2:2", "esp:GND.1", "black", [] ],
-    [ "esp:17", "ledError:A", "red", [] ],
-    [ "ledError:C", "r3:1", "black", [] ],
-    [ "r3:2", "esp:GND.1", "black", [] ]
+    [ "esp:3V3.1", "bb1:tp.1", "red", [ "v-19.38", "h232.92" ] ],
+    [ "esp:GND.1", "bb1:tn.1", "black", [ "v47.82", "h182.12", "v-222.5" ] ],
+    [ "esp:5V", "bb1:bp.1", "red", [ "v-0.18", "h232.92" ] ],
+    [ "lcd:VCC", "bb1:bp.25", "red", [ "h-10.6", "v-54.3", "h316.8", "v431.1" ] ],
+    [ "lcd:GND", "bb1:bn.25", "black", [ "v-54.4", "h315.8", "v450.7" ] ],
+    [ "lcd:SDA", "esp:8", "blue", [ "h-241", "v281.98" ] ],
+    [ "lcd:SCL", "esp:9", "limegreen", [ "h-231.4", "v301.28" ] ],
+    [ "rfid:SDA", "esp:10", "orange", [ "v-38.76", "h-784.55", "v220.98" ] ],
+    [ "rfid:MOSI", "esp:11", "green", [ "v-29.16", "h-774.95", "v220.98" ] ],
+    [ "rfid:SCK", "esp:12", "violet", [ "v-19.56", "h-765.35", "v220.98" ] ],
+    [ "rfid:MISO", "esp:13", "gray", [ "v-9.96", "h-678.95", "v220.98" ] ],
+    [ "rfid:RST", "esp:14", "purple", [ "v9.24", "h-707.75", "v211.38" ] ],
+    [ "esp:15", "bb1:6t.c", "green", [ "h-57.88", "v211.02", "h330.8" ] ],
+    [ "bb1:5b.j", "bb1:bn.4", "black", [] ],
+    [ "esp:16", "bb1:12t.c", "orange", [ "h-48.28", "v191.82", "h378.8" ] ],
+    [ "bb1:11b.j", "bb1:bn.9", "black", [] ],
+    [ "esp:17", "bb1:18t.c", "red", [ "h-38.68", "v172.62", "h426.8" ] ],
+    [ "bb1:17b.j", "bb1:bn.14", "black", [] ],
+    [ "esp:GND.4", "bb1:bn.1", "black", [ "h0" ] ],
+    [ "rfid:GND", "bb1:tn.22", "black", [ "v18.84", "h-176.95" ] ],
+    [ "rfid:3.3V", "bb1:tn.25", "red", [ "v-0.36", "h-131.75", "v65.5" ] ]
   ],
   "dependencies": {}
 }
