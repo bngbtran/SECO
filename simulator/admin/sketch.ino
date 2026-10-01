@@ -3,7 +3,7 @@
  *
  * Flow (FR02, Web Admin > Member details)
  *   1. Admin creates a member, then clicks "Gán thẻ" (or "Đổi thẻ").
- *      The API sends cmd SCAN; the LCD shows "QUET THE CHO: <member>".
+ *      The API sends cmd SCAN; the OLED shows "QUET THE CHO: <member>".
  *   2. Tap a card. The reader sends its UID; the web dialog shows it.
  *   3. Admin clicks "Hoàn tất": the API saves the UID as the member's card
  *      (a replaced card is unlinked) and sends cmd DONE -> "DA GAN THE".
@@ -22,7 +22,9 @@
  */
 
 #include <ArduinoJson.h>
-#include <LiquidCrystal_I2C.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Fonts/FreeSansBold9pt7b.h>
 #include <MFRC522.h>
 #include <PubSubClient.h>
 #include <SPI.h>
@@ -50,21 +52,18 @@ const uint8_t RFID_MOSI = 11;
 const uint8_t RFID_SS = 10;   // "SDA" on the module
 const uint8_t RFID_RST = 14;
 
-const uint8_t LED_ONLINE = 15;  // green: connected to MQTT
-const uint8_t LED_WAIT = 16;    // yellow: waiting for a card
-const uint8_t LED_ERROR = 17;   // red: card refused
 
 const uint8_t I2C_SDA = 8;
 const uint8_t I2C_SCL = 9;
 
 const unsigned long HEARTBEAT_MS = 10000;
-const unsigned long MESSAGE_MS = 3500;  // how long a result stays on the LCD
+const unsigned long MESSAGE_MS = 3500;  // how long a result stays on the OLED
 
 // ---- State -----------------------------------------------------------------
 
 WiFiClient wifi;
 PubSubClient mqtt(wifi);
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+Adafruit_SSD1306 oled(128, 64, &Wire, -1);  // SSD1306 128x64 I2C, 0x3C
 MFRC522 rfid(RFID_SS, RFID_RST);
 
 bool waiting = false;           // a SCAN request is open
@@ -77,11 +76,22 @@ unsigned long lastHeartbeat = 0;
 unsigned long messageUntil = 0;  // 0 = show the home screen
 String serialLine;
 
+// OLED notice (see "OLED" below). Declared before any function: the Arduino
+// builder puts the function prototypes there.
+enum class Icon { Ok, Error, Info, Busy };
+
+struct Notice {
+  Icon icon;
+  String title;
+  String detail;
+  String hint;
+} notice;
+
 String topic(const char *kind) { return String("seco/reader/") + READER_ID + "/" + kind; }
 
-// ---- LCD -------------------------------------------------------------------
+// ---- OLED ------------------------------------------------------------------
 
-/** Keep the ASCII base letter of Vietnamese characters; the LCD has no accents. */
+/** Keep the ASCII base letter of Vietnamese characters; the OLED font has no accents. */
 String ascii(const String &text) {
   // U+1EA0..U+1EF9 (Ạ..ỹ) in order, reduced to their base letters.
   static const char *EXT = "AaAaAaAaAaAaAaAaAaAaAaAaEeEeEeEeEeEeEeEeIiIiOoOoOoOoOoOoOoOoOoOoOoOoUuUuUuUuUuUuUuYyYyYyYy";
@@ -111,33 +121,181 @@ String ascii(const String &text) {
   return out;
 }
 
-void show(const String &line1, const String &line2) {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(ascii(line1).substring(0, 16));
-  lcd.setCursor(0, 1);
-  lcd.print(ascii(line2).substring(0, 16));
+#ifndef OLED_ENABLED
+#define OLED_ENABLED 1
+#endif
+
+// Screens (128x64): a status bar on top, then one of
+//   connecting  logo + what we are waiting for
+//   idle        card icon with RFID waves, "San sang"
+//   waiting     member name + countdown bar while a SCAN request is open
+//   notice      icon (ok / error / info / busy) + title + detail, a few seconds
+String connectStatus = "Khoi dong...";
+unsigned long waitTotalMs = 1;
+const GFXfont *BOLD = &FreeSansBold9pt7b;
+
+uint16_t textWidth(const String &text, const GFXfont *font) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  oled.setFont(font);
+  oled.setTextSize(1);
+  oled.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  return w;
 }
 
-/** Show a result for a few seconds, then go back to the home screen. */
-void flash(const String &line1, const String &line2) {
-  show(line1, line2);
-  messageUntil = millis() + MESSAGE_MS;
+/**
+ * Text whose baseline is at y, inside [x, x + width). Bold falls back to the
+ * small font when it does not fit; the small font is clipped with "..".
+ */
+void label(String text, int16_t x, int16_t y, int16_t width, bool center, bool bold = false) {
+  text = ascii(text);
+  const GFXfont *font = bold && textWidth(text, BOLD) <= width ? BOLD : nullptr;
+  if (!font) {
+    int maxChars = width / 6;
+    if ((int)text.length() > maxChars) text = text.substring(0, max(0, maxChars - 2)) + "..";
+  }
+  uint16_t w = textWidth(text, font);
+  oled.setFont(font);
+  oled.setTextColor(SSD1306_WHITE);
+  // Custom fonts are drawn from the baseline, the built-in one from its top.
+  oled.setCursor(center ? x + (width - (int16_t)w) / 2 : x, font ? y : y - 7);
+  oled.print(text);
+  oled.setFont(nullptr);
 }
 
-void showHome() {
-  if (waiting) {
-    show(replacing ? "DOI THE CHO:" : "QUET THE CHO:", memberName);
-  } else {
-    show("SECO DAU DOC THE", mqtt.connected() ? String(READER_ID) + " READY" : "DANG KET NOI...");
+void drawStatusBar() {
+  oled.fillRoundRect(0, 0, 29, 10, 2, SSD1306_WHITE);
+  oled.setFont(nullptr);
+  oled.setTextColor(SSD1306_BLACK);
+  oled.setCursor(3, 1);
+  oled.print("SECO");
+  oled.setTextColor(SSD1306_WHITE);
+  oled.setCursor(33, 1);
+  oled.print(READER_ID);
+
+  // MQTT: filled dot = connected to the backend.
+  if (mqtt.connected()) oled.fillCircle(106, 4, 3, SSD1306_WHITE);
+  else oled.drawCircle(106, 4, 3, SSD1306_WHITE);
+
+  // WiFi signal: 3 bars.
+  int bars = 0;
+  if (WiFi.status() == WL_CONNECTED) {
+    long rssi = WiFi.RSSI();
+    bars = rssi > -60 ? 3 : rssi > -72 ? 2 : 1;
+  }
+  for (int i = 0; i < 3; i++) {
+    int h = 3 + i * 3, bx = 114 + i * 5;
+    if (i < bars) oled.fillRect(bx, 9 - h, 3, h, SSD1306_WHITE);
+    else oled.drawFastHLine(bx, 8, 3, SSD1306_WHITE);
+  }
+  oled.drawFastHLine(0, 12, 128, SSD1306_WHITE);
+}
+
+void drawSpinner(int16_t cx, int16_t cy, int16_t r) {
+  int active = (millis() / 120) % 8;
+  for (int i = 0; i < 8; i++) {
+    float a = i * PI / 4;
+    int16_t px = cx + cos(a) * r, py = cy + sin(a) * r;
+    if (i == active) oled.fillCircle(px, py, 2, SSD1306_WHITE);
+    else oled.drawPixel(px, py, SSD1306_WHITE);
   }
 }
 
-void setLeds(bool error = false) {
-  digitalWrite(LED_ONLINE, mqtt.connected());
-  digitalWrite(LED_WAIT, waiting);
-  digitalWrite(LED_ERROR, error);
+void drawIcon(Icon icon, int16_t cx, int16_t cy) {
+  const int16_t r = 11;
+  switch (icon) {
+    case Icon::Ok:
+      oled.fillCircle(cx, cy, r, SSD1306_WHITE);
+      for (int t = 0; t < 2; t++) {  // 2 px thick check mark
+        oled.drawLine(cx - 6, cy + t, cx - 2, cy + 4 + t, SSD1306_BLACK);
+        oled.drawLine(cx - 2, cy + 4 + t, cx + 6, cy - 4 + t, SSD1306_BLACK);
+      }
+      break;
+    case Icon::Error:
+      oled.fillCircle(cx, cy, r, SSD1306_WHITE);
+      for (int t = 0; t < 2; t++) {
+        oled.drawLine(cx - 5 + t, cy - 5, cx + 5 + t, cy + 5, SSD1306_BLACK);
+        oled.drawLine(cx + 5 + t, cy - 5, cx - 5 + t, cy + 5, SSD1306_BLACK);
+      }
+      break;
+    case Icon::Info:
+      oled.drawCircle(cx, cy, r, SSD1306_WHITE);
+      oled.fillRect(cx - 1, cy - 1, 3, 7, SSD1306_WHITE);
+      oled.fillRect(cx - 1, cy - 6, 3, 3, SSD1306_WHITE);
+      break;
+    case Icon::Busy:
+      drawSpinner(cx, cy, 9);
+      break;
+  }
 }
+
+/** Card with a chip and RFID waves that grow one by one. */
+void drawCard(int16_t x, int16_t y) {
+  oled.drawRoundRect(x, y, 30, 20, 3, SSD1306_WHITE);
+  oled.fillRoundRect(x + 4, y + 6, 8, 7, 1, SSD1306_WHITE);
+  oled.drawFastHLine(x + 4, y + 16, 18, SSD1306_WHITE);
+  int waves = (millis() / 350) % 4;
+  for (int i = 0; i < waves; i++) oled.drawCircleHelper(x + 32, y + 10, 4 + i * 4, 0x2 | 0x4, SSD1306_WHITE);
+}
+
+void drawConnecting() {
+  label("SECO", 0, 36, 128, true, true);
+  label(WiFi.status() == WL_CONNECTED ? "Ket noi may chu..." : connectStatus, 0, 50, 128, true);
+  for (int i = 0; i < 3; i++) {  // loading dots
+    bool on = (millis() / 300) % 3 == (unsigned long)i;
+    if (on) oled.fillCircle(56 + i * 8, 59, 2, SSD1306_WHITE);
+    else oled.drawCircle(56 + i * 8, 59, 2, SSD1306_WHITE);
+  }
+}
+
+void drawIdle() {
+  drawCard(4, 22);
+  label("San sang", 54, 34, 74, false, true);
+  label("Cho yeu cau", 54, 47, 74, false);
+  label("Gan the tu web admin", 0, 62, 128, true);
+}
+
+void drawWaiting() {
+  label(replacing ? "DOI THE CHO" : "GAN THE CHO", 0, 22, 128, true);
+  label(memberName, 0, 39, 128, true, true);
+  // Blinking prompt + countdown bar.
+  if ((millis() / 600) % 2) label("Dat the len dau doc", 0, 51, 128, true);
+  long left = max(0L, (long)(deadline - millis()));
+  int fill = (int)(96L * left / (long)waitTotalMs);
+  oled.drawRoundRect(0, 56, 100, 8, 3, SSD1306_WHITE);
+  if (fill > 2) oled.fillRoundRect(2, 58, fill, 4, 1, SSD1306_WHITE);
+  oled.setFont(nullptr);
+  oled.setCursor(104, 56);
+  oled.printf("%2lds", (left + 999) / 1000);
+}
+
+void drawNotice() {
+  drawIcon(notice.icon, 13, 31);
+  label(notice.title, 30, 32, 98, false, true);
+  label(notice.detail, 30, 46, 98, false);
+  if (notice.hint.length()) label(notice.hint, 0, 62, 128, true);
+}
+
+void render() {
+  if (!OLED_ENABLED) return;
+  oled.clearDisplay();
+  drawStatusBar();
+  if (messageUntil) drawNotice();
+  else if (WiFi.status() != WL_CONNECTED || !mqtt.connected()) drawConnecting();
+  else if (waiting) drawWaiting();
+  else drawIdle();
+  oled.display();
+}
+
+/** Show a result for a few seconds, then go back to the current screen. */
+void notify(Icon icon, const String &title, const String &detail, const String &hint = "") {
+  notice = {icon, title, detail, hint};
+  messageUntil = millis() + MESSAGE_MS;
+  Serial.printf("[OLED] %s | %s %s\n", ascii(title).c_str(), ascii(detail).c_str(), ascii(hint).c_str());
+  render();
+}
+
+void showHome() { render(); }
 
 // ---- MQTT ------------------------------------------------------------------
 
@@ -153,7 +311,6 @@ void stopWaiting() {
   registrationId = "";
   memberName = "";
   replacing = false;
-  setLeds();
 }
 
 void onCommand(JsonDocument &doc) {
@@ -165,8 +322,8 @@ void onCommand(JsonDocument &doc) {
     memberName = doc["user_name"] | "";
     replacing = String(doc["mode"] | "ASSIGN") == "REPLACE";
     deadline = millis() + (unsigned long)(doc["timeout_s"] | 90) * 1000UL;
+    waitTotalMs = max(1UL, deadline - millis());
     messageUntil = 0;
-    setLeds();
     showHome();
     Serial.printf("SCAN for %s: tap a card on the MFRC522 (or type a UID)\n", memberName.c_str());
     return;
@@ -175,14 +332,14 @@ void onCommand(JsonDocument &doc) {
   if (command == "DONE") {
     String name = doc["user_name"] | "";
     stopWaiting();
-    flash("DA GAN THE", name);
+    notify(Icon::Ok, "Da gan the", name, "The da san sang de sac");
     return;
   }
 
   if (command == "CANCEL") {
     if (registrationId.isEmpty() || registrationId == (doc["registration_id"] | "")) {
       stopWaiting();
-      flash("DA HUY YEU CAU", "");
+      notify(Icon::Info, "Da huy", "Yeu cau gan the da dong");
     }
   }
 }
@@ -193,17 +350,13 @@ void onResult(JsonDocument &doc) {
   String uid = doc["uid"] | "";
 
   if (ok) {
-    setLeds(false);
-    flash("DA DOC " + uid, "XAC NHAN TREN WEB");
+    notify(Icon::Ok, "Da doc the", uid, "Bam Hoan tat tren web");
   } else if (error == "UID_TAKEN") {
-    setLeds(true);
-    flash("THE DA CO CHU", "QUET THE KHAC");
+    notify(Icon::Error, "The da co chu", uid, "Hay quet the khac");
   } else if (error == "NO_REQUEST") {
-    setLeds(true);
-    flash("UID " + uid, "CHUA CO YEU CAU");
+    notify(Icon::Info, "Chua co yeu cau", uid, "Bam Gan the tren web");
   } else {
-    setLeds(true);
-    flash("LOI DOC THE", error);
+    notify(Icon::Error, "Loi doc the", error);
   }
 }
 
@@ -230,7 +383,6 @@ void connectMqtt() {
   } else {
     Serial.printf("MQTT connect failed, rc=%d\n", mqtt.state());
   }
-  setLeds();
   if (!messageUntil) showHome();
 }
 
@@ -248,7 +400,7 @@ void onCardTapped(String uid) {
   uid.toUpperCase();
   if (uid.isEmpty()) return;
   if (!mqtt.connected()) {
-    flash("CHUA KET NOI", "MQTT");
+    notify(Icon::Error, "Mat ket noi", "May chu MQTT");
     return;
   }
 
@@ -256,7 +408,7 @@ void onCardTapped(String uid) {
   doc["uid"] = uid;
   if (waiting) doc["registration_id"] = registrationId;
   publishJson("scan", doc);
-  show("DANG GUI UID...", uid);
+  notify(Icon::Busy, "Dang gui...", uid);
 }
 
 /** UID bytes as uppercase hex without separators, e.g. 11:22:33:44 -> "11223344". */
@@ -308,14 +460,12 @@ void readSerial() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED_ONLINE, OUTPUT);
-  pinMode(LED_WAIT, OUTPUT);
-  pinMode(LED_ERROR, OUTPUT);
 
   Wire.begin(I2C_SDA, I2C_SCL);
-  lcd.init();
-  lcd.backlight();
-  show("SECO DAU DOC THE", "KET NOI WIFI...");
+  Wire.setClock(400000);  // full frame in ~25 ms
+  oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  render();
+  connectStatus = "Ket noi WiFi...";
 
   SPI.begin(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_SS);
   rfid.PCD_Init();
@@ -323,7 +473,10 @@ void setup() {
   rfid.PCD_DumpVersionToSerial();
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 6);
-  while (WiFi.status() != WL_CONNECTED) delay(100);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+    render();
+  }
   Serial.printf("WiFi connected, IP %s\n", WiFi.localIP().toString().c_str());
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
@@ -346,15 +499,22 @@ void loop() {
     heartbeat();
   }
 
-  // The API also expires the request (and sends CANCEL); this frees the LCD.
+  // The API also expires the request (and sends CANCEL); this frees the OLED.
   if (waiting && (long)(millis() - deadline) > 0) {
     stopWaiting();
-    flash("HET THOI GIAN", "QUET THE");
+    notify(Icon::Info, "Het thoi gian", "Chua quet the nao");
   }
 
   if (messageUntil && (long)(millis() - messageUntil) > 0) {
     messageUntil = 0;
     showHome();
+  }
+
+  // Animations (waves, spinner, countdown).
+  static unsigned long lastFrame = 0;
+  if (millis() - lastFrame > 100) {
+    lastFrame = millis();
+    render();
   }
 
   readCard();

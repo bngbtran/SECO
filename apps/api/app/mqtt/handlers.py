@@ -36,6 +36,11 @@ from app.modules.member.service import (
     stop_member_session,
     verify_member_rfid,
 )
+from app.modules.station.device import (
+    handle_station_sync,
+    handle_technician_action,
+    handle_technician_verify,
+)
 from app.mqtt import topics
 from app.websocket.manager import manager
 
@@ -265,6 +270,9 @@ dispatcher.register("SESSION_START", _handle_session_start)
 dispatcher.register("SESSION_END", _handle_session_end)
 dispatcher.register("GUEST_START", _handle_guest_start)
 dispatcher.register("GUEST_PAYMENT_REQUEST", _handle_guest_payment_request)
+dispatcher.register("TECHNICIAN_VERIFY", handle_technician_verify)
+dispatcher.register("TECHNICIAN_ACTION", handle_technician_action)
+dispatcher.register("STATION_SYNC", handle_station_sync)
 
 
 def parse_topic(topic: str) -> tuple[str, str] | None:

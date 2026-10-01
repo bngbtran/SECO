@@ -1,0 +1,491 @@
+{
+  "version": 1,
+  "author": "SECO team - charging station EVCS-01",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-s3-devkitc-1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-breadboard",
+      "id": "bb1",
+      "top": 330,
+      "left": -420,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd",
+      "top": -230,
+      "left": 230,
+      "attrs": {
+        "pins": "i2c",
+        "i2cAddress": "0x27"
+      }
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled",
+      "top": -205,
+      "left": 560,
+      "attrs": {
+        "i2cAddress": "0x3c"
+      }
+    },
+    {
+      "type": "board-mfrc522",
+      "id": "rfid",
+      "top": -60,
+      "left": 700,
+      "rotate": 90,
+      "attrs": {
+        "uid": "A1:B2:C3:D4"
+      }
+    },
+    {
+      "type": "wokwi-ds18b20",
+      "id": "temp",
+      "top": -20,
+      "left": 230,
+      "attrs": {
+        "temperature": "28"
+      }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "current",
+      "top": -30,
+      "left": 330,
+      "attrs": {
+        "value": "550"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "plug",
+      "top": 90,
+      "left": 230,
+      "attrs": {
+        "value": "",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-slide-switch",
+      "id": "estop",
+      "top": 90,
+      "left": 310,
+      "attrs": {
+        "value": "",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnStart",
+      "top": 150,
+      "left": 230,
+      "attrs": {
+        "color": "green",
+        "label": "START",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btnStop",
+      "top": 150,
+      "left": 340,
+      "attrs": {
+        "color": "red",
+        "label": "STOP",
+        "bounce": "0"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "lock",
+      "top": 80,
+      "left": 460,
+      "attrs": {
+        "hornColor": "#ff8800"
+      }
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "relay",
+      "top": 220,
+      "left": 460,
+      "attrs": {
+        "transistor": "npn"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "load",
+      "top": 200,
+      "left": 660,
+      "attrs": {
+        "color": "orange",
+        "label": "LOAD 12V"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rLoad",
+      "top": 270,
+      "left": 690,
+      "rotate": 90,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 230,
+      "left": 250,
+      "attrs": {
+        "volume": "0.2"
+      }
+    },
+    {
+      "type": "wokwi-analog-joystick",
+      "id": "joystick",
+      "top": -200,
+      "left": -230,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    [
+      "esp:TX",
+      "$serialMonitor:RX",
+      "",
+      []
+    ],
+    [
+      "esp:RX",
+      "$serialMonitor:TX",
+      "",
+      []
+    ],
+    [
+      "esp:3V3.1",
+      "bb1:tp.1",
+      "red",
+      []
+    ],
+    [
+      "esp:GND.1",
+      "bb1:tn.1",
+      "black",
+      []
+    ],
+    [
+      "esp:5V",
+      "bb1:bp.1",
+      "red",
+      []
+    ],
+    [
+      "esp:GND.2",
+      "bb1:bn.1",
+      "black",
+      []
+    ],
+    [
+      "esp:8",
+      "bb1:1t.a",
+      "blue",
+      []
+    ],
+    [
+      "esp:9",
+      "bb1:2t.a",
+      "limegreen",
+      []
+    ],
+    [
+      "lcd:SDA",
+      "bb1:1t.b",
+      "blue",
+      []
+    ],
+    [
+      "lcd:SCL",
+      "bb1:2t.b",
+      "limegreen",
+      []
+    ],
+    [
+      "oled:SDA",
+      "bb1:1t.c",
+      "blue",
+      []
+    ],
+    [
+      "oled:SCL",
+      "bb1:2t.c",
+      "limegreen",
+      []
+    ],
+    [
+      "lcd:VCC",
+      "bb1:bp.5",
+      "red",
+      []
+    ],
+    [
+      "lcd:GND",
+      "bb1:bn.5",
+      "black",
+      []
+    ],
+    [
+      "oled:VCC",
+      "bb1:tp.5",
+      "red",
+      []
+    ],
+    [
+      "oled:GND",
+      "bb1:tn.5",
+      "black",
+      []
+    ],
+    [
+      "rfid:SDA",
+      "esp:10",
+      "orange",
+      []
+    ],
+    [
+      "rfid:MOSI",
+      "esp:11",
+      "green",
+      []
+    ],
+    [
+      "rfid:SCK",
+      "esp:12",
+      "violet",
+      []
+    ],
+    [
+      "rfid:MISO",
+      "esp:13",
+      "gray",
+      []
+    ],
+    [
+      "rfid:RST",
+      "esp:14",
+      "purple",
+      []
+    ],
+    [
+      "rfid:3.3V",
+      "bb1:tp.10",
+      "red",
+      []
+    ],
+    [
+      "rfid:GND",
+      "bb1:tn.10",
+      "black",
+      []
+    ],
+    [
+      "temp:DQ",
+      "esp:4",
+      "gold",
+      []
+    ],
+    [
+      "temp:VCC",
+      "bb1:tp.14",
+      "red",
+      []
+    ],
+    [
+      "temp:GND",
+      "bb1:tn.14",
+      "black",
+      []
+    ],
+    [
+      "current:SIG",
+      "esp:1",
+      "cyan",
+      []
+    ],
+    [
+      "current:VCC",
+      "bb1:tp.18",
+      "red",
+      []
+    ],
+    [
+      "current:GND",
+      "bb1:tn.18",
+      "black",
+      []
+    ],
+    [
+      "plug:2",
+      "esp:5",
+      "white",
+      []
+    ],
+    [
+      "plug:3",
+      "bb1:tn.22",
+      "black",
+      []
+    ],
+    [
+      "estop:2",
+      "esp:15",
+      "red",
+      []
+    ],
+    [
+      "estop:3",
+      "bb1:tn.26",
+      "black",
+      []
+    ],
+    [
+      "btnStart:1.l",
+      "esp:6",
+      "green",
+      []
+    ],
+    [
+      "btnStart:2.l",
+      "bb1:tn.30",
+      "black",
+      []
+    ],
+    [
+      "btnStop:1.l",
+      "esp:7",
+      "red",
+      []
+    ],
+    [
+      "btnStop:2.l",
+      "bb1:tn.34",
+      "black",
+      []
+    ],
+    [
+      "lock:PWM",
+      "esp:17",
+      "orange",
+      []
+    ],
+    [
+      "lock:V+",
+      "bb1:bp.10",
+      "red",
+      []
+    ],
+    [
+      "lock:GND",
+      "bb1:bn.10",
+      "black",
+      []
+    ],
+    [
+      "relay:IN",
+      "esp:16",
+      "magenta",
+      []
+    ],
+    [
+      "relay:VCC",
+      "bb1:bp.14",
+      "red",
+      []
+    ],
+    [
+      "relay:GND",
+      "bb1:bn.14",
+      "black",
+      []
+    ],
+    [
+      "relay:COM",
+      "bb1:bp.18",
+      "red",
+      []
+    ],
+    [
+      "relay:NO",
+      "load:A",
+      "orange",
+      []
+    ],
+    [
+      "load:C",
+      "rLoad:1",
+      "black",
+      []
+    ],
+    [
+      "rLoad:2",
+      "bb1:bn.18",
+      "black",
+      []
+    ],
+    [
+      "buzzer:2",
+      "esp:18",
+      "purple",
+      []
+    ],
+    [
+      "buzzer:1",
+      "bb1:tn.38",
+      "black",
+      []
+    ],
+    [
+      "joystick:HORZ",
+      "esp:2",
+      "green",
+      []
+    ],
+    [
+      "joystick:VERT",
+      "esp:3",
+      "blue",
+      []
+    ],
+    [
+      "joystick:SEL",
+      "esp:39",
+      "orange",
+      []
+    ],
+    [
+      "joystick:VCC",
+      "bb1:tp.42",
+      "red",
+      []
+    ],
+    [
+      "joystick:GND",
+      "bb1:tn.42",
+      "black",
+      []
+    ]
+  ],
+  "dependencies": {}
+}
