@@ -10,6 +10,18 @@ import {
 
 import type { RealtimeEvent } from "./types";
 
+/**
+ * WebSocket endpoint. Locally Vite proxies /ws to the API; on Vercel (no
+ * WebSocket proxying) VITE_WS_URL points straight at the API, e.g.
+ * wss://seco-backend-api.onrender.com/ws.
+ */
+function wsBase() {
+  const configured = import.meta.env.VITE_WS_URL as string | undefined;
+  if (configured) return configured;
+  const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${scheme}://${window.location.host}/ws`;
+}
+
 export interface LoggedEvent extends RealtimeEvent {
   receivedAt: number;
 }
@@ -46,8 +58,7 @@ export function RealtimeProvider({ token, children }: { token: string; children:
     let closed = false;
 
     const connect = () => {
-      const scheme = window.location.protocol === "https:" ? "wss" : "ws";
-      socket = new WebSocket(`${scheme}://${window.location.host}/ws?token=${encodeURIComponent(token)}`);
+      socket = new WebSocket(`${wsBase()}?token=${encodeURIComponent(token)}`);
       socket.onopen = () => setConnected(true);
       socket.onclose = () => {
         setConnected(false);
