@@ -71,7 +71,8 @@ app.include_router(member_router)
 app.include_router(guest_router)
 app.include_router(admin_router)
 
-@app.get("/health", tags=["Health"])
+# HEAD too: uptime monitors (UptimeRobot) ping with HEAD to keep the free Render instance awake.
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
 async def health():
     await check_database()
     return {
