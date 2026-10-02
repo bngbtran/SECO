@@ -8,7 +8,7 @@
 # once, when the Blueprint is created. See docs/deploy-render.md.
 services:
   - type: web
-    name: seco-api
+    name: seco-backend-api
     runtime: python
     region: singapore        # closest to Vietnam and to the Atlas cluster (AWS ap-southeast-1)
     plan: free

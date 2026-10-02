@@ -40,7 +40,7 @@ Các trụ sạc (Wokwi hoặc phần cứng thật) và đầu đọc thẻ adm
 
 1. `render.yaml` đã nằm trên nhánh **`main`**.
 2. Đăng nhập <https://dashboard.render.com> bằng GitHub.
-3. Chọn **New** → **Blueprint** → chọn repo **`bngbtran/SECO`**, nhánh `main`. Render đọc `render.yaml` và tạo service `seco-api`.
+3. Chọn **New** → **Blueprint** → chọn repo **`bngbtran/SECO`**, nhánh `main`. Render đọc `render.yaml` và tạo service `seco-backend-api`.
 4. Render yêu cầu nhập các biến bí mật (`sync: false`):
 
 | Biến | Giá trị |
@@ -60,7 +60,7 @@ Không commit các giá trị bí mật vào git. Chúng chỉ nằm trong dashb
 
 ## Bước 4: Kiểm tra
 
-Mở `https://seco-api.onrender.com/health` (tên miền thật xem ở trang service). Kết quả mong đợi:
+Mở `https://seco-backend-api.onrender.com/health` (tên miền thật xem ở trang service). Kết quả mong đợi:
 
 ```json
 {"status": "ok", "service": "seco-api", "database": "ok", "mqtt": "starting"}
@@ -71,7 +71,7 @@ Mở `https://seco-api.onrender.com/health` (tên miền thật xem ở trang se
 - Log báo lỗi MQTT: kiểm tra `MQTT_HOST`, user/mật khẩu, và `MQTT_TLS=true` / `MQTT_PORT=8883`.
 - Lỗi 500 ở `/health`: kiểm tra `MONGO_URI` và Network Access của Atlas.
 - Log khởi động xem ở tab **Logs**. Lúc khởi động, API tự áp dụng các migration còn thiếu.
-- Tài liệu API: `https://seco-api.onrender.com/docs`.
+- Tài liệu API: `https://seco-backend-api.onrender.com/docs`.
 
 ### Bước 4b: Sau khi merge `dev` → `main`
 
@@ -87,7 +87,7 @@ Vì sao lần đầu dùng database tạm: code cũ trên `main` khi khởi đ�
 Gói Free tắt service sau **15 phút không có request HTTP**. Lần gọi sau phải chờ khoảng 1 phút để khởi động lại, và trong lúc ngủ thì mất MQTT, trụ báo offline, ticker tính tiền dừng. Kết nối MQTT và WebSocket **không** giữ service thức được.
 
 1. Tạo tài khoản miễn phí tại <https://uptimerobot.com>.
-2. **Add New Monitor** → loại **HTTP(s)** → URL `https://seco-api.onrender.com/health` → **interval 5 phút**.
+2. **Add New Monitor** → loại **HTTP(s)** → URL `https://seco-backend-api.onrender.com/health` → **interval 5 phút**.
 
 Một service chạy 24/7 tốn khoảng 744 giờ/tháng, vừa đủ hạn mức 750 giờ của gói Free.
 
