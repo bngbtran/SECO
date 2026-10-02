@@ -4,3 +4,13 @@ version = 1
 # Full flash image (bootloader + partitions + app) built by build.sh.
 firmware = "build/sketch.ino.merged.bin"
 elf = "build/sketch.ino.elf"
+
+# Custom chips (chips/*.chip.c, rebuilt with chips/build.sh): the INA219 and
+# the 9V battery do not exist in the Wokwi part library.
+[[chip]]
+name = "ina219"
+binary = "chips/ina219.chip.wasm"
+
+[[chip]]
+name = "battery-9v"
+binary = "chips/battery-9v.chip.wasm"

@@ -188,12 +188,19 @@ def test_unplug_event_stops_bills_and_notifies(captured):
             assert station["status"] == "READY"
             assert user["balance_vnd"] == 100_000 - 10
 
-            assert captured["commands"] == [
-                (
-                    ids["station_id"],
-                    {"command": "STOP", "session_id": ids["session_id"], "reason": "UNPLUG"},
-                )
-            ]
+            assert len(captured["commands"]) == 1
+            station_id, command = captured["commands"][0]
+            assert station_id == ids["station_id"]
+            # STOP carries the final bill so the station can show what was charged.
+            assert {k: command[k] for k in ("command", "session_id", "reason", "type", "cost_vnd", "charged_vnd")} == {
+                "command": "STOP",
+                "session_id": ids["session_id"],
+                "reason": "UNPLUG",
+                "type": "MEMBER",
+                "cost_vnd": 10,
+                "charged_vnd": 10,
+            }
+            assert command["balance_after_vnd"] == 100_000 - 10
             stopped = captured["broadcasts"][-1]
             assert stopped["event"] == "STOPPED"
             assert stopped["user_id"] == ids["user_id"]

@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import AdminLayout from "../features/admin/AdminLayout";
 import LoginPage from "../features/admin/LoginPage";
+import PayPage from "../features/guest/PayPage";
 import DashboardPage from "../features/admin/pages/DashboardPage";
 import FaultsPage from "../features/admin/pages/FaultsPage";
 import MaintenancePage from "../features/admin/pages/MaintenancePage";
@@ -35,6 +36,8 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            {/* Guest sandbox payment, opened from the station QR: no login. */}
+            <Route path="/pay/:paymentId" element={<PayPage />} />
             <Route element={<Protected />}>
               <Route index element={<DashboardPage />} />
               <Route path="stations" element={<StationsPage />} />

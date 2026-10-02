@@ -235,6 +235,7 @@ export default function SessionDetailPage() {
                     <th>Tạo lúc</th>
                     <th>Thanh toán</th>
                     <th>Trạng thái</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -246,6 +247,13 @@ export default function SessionDetailPage() {
                       <td className="muted">{p.paid_at ? fTimeS(p.paid_at) : "—"}</td>
                       <td>
                         <PaymentBadge value={p.status} />
+                      </td>
+                      <td className="r">
+                        {p.status === "PENDING" && (
+                          <a className="btn btn-sm btn-primary" href={`/pay/${p.payment_id}`} target="_blank" rel="noreferrer">
+                            Thanh toán Sandbox
+                          </a>
+                        )}
                       </td>
                     </tr>
                   ))}

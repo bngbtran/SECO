@@ -1,11 +1,10 @@
 # Libraries for the Wokwi web editor (VS Code builds locally with build.sh).
 PubSubClient
 ArduinoJson
-LiquidCrystal I2C
+Adafruit INA219
 MFRC522
-Adafruit SSD1306
+Adafruit ILI9341
 Adafruit GFX Library
 OneWire
 DallasTemperature
-ESP32Servo
 QRCodeGenerator

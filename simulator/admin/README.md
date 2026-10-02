@@ -32,7 +32,8 @@ press **Tap** (a 0.5 s tap) or toggle **Hold**.
 | Blue Card (UID set to `A1:B2:C3:D4` in `diagram.json`) | `A1B2C3D4` | see a refusal: it belongs to `user@seco.com` |
 | Green Card | `11223344` | assign a new card |
 | Yellow Card | `55667788` | replace it with another new card |
-| Red Card / NFC Tag / Key Fob | `AABBCCDD` / `04112233445566` / `C0FFEE99` | more new cards |
+| Red Card / NFC Tag | `AABBCCDD` / `04112233445566` | more new cards |
+| Key Fob | `C0FFEE99` | see a refusal: it is the technician's card (`tech@seco.com`) |
 
 To use other UIDs, change the Blue Card `uid` attribute in `diagram.json`, or
 type a hex UID + Enter in the Serial Monitor.

@@ -11,37 +11,60 @@
       "attrs": {}
     },
     {
-      "type": "wokwi-breadboard",
+      "type": "wokwi-breadboard-half",
       "id": "bb1",
-      "top": 330,
-      "left": -420,
+      "top": 120,
+      "left": 200,
       "attrs": {}
     },
     {
-      "type": "wokwi-lcd1602",
-      "id": "lcd",
-      "top": -230,
-      "left": 230,
+      "type": "wokwi-ili9341",
+      "id": "tft",
+      "top": -430,
+      "left": 170,
+      "attrs": {}
+    },
+    {
+      "type": "chip-ina219",
+      "id": "ina219",
+      "top": -60,
+      "left": 430,
       "attrs": {
-        "pins": "i2c",
-        "i2cAddress": "0x27"
+        "busVoltage": "9",
+        "loadCurrent": "350"
       }
     },
     {
-      "type": "board-ssd1306",
-      "id": "oled",
-      "top": -205,
+      "type": "chip-battery-9v",
+      "id": "battery",
+      "top": -60,
       "left": 560,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "relay",
+      "top": 350,
+      "left": 420,
       "attrs": {
-        "i2cAddress": "0x3c"
+        "transistor": "npn"
+      }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "lock",
+      "top": 350,
+      "left": 200,
+      "attrs": {
+        "hornColor": "#ff8800"
       }
     },
     {
       "type": "board-mfrc522",
       "id": "rfid",
-      "top": -60,
-      "left": 700,
-      "rotate": 90,
+      "top": 40,
+      "left": -290,
+      "rotate": 270,
       "attrs": {
         "uid": "A1:B2:C3:D4"
       }
@@ -49,57 +72,34 @@
     {
       "type": "wokwi-ds18b20",
       "id": "temp",
-      "top": -20,
-      "left": 230,
+      "top": -90,
+      "left": 90,
       "attrs": {
         "temperature": "28"
       }
     },
     {
-      "type": "wokwi-potentiometer",
-      "id": "current",
-      "top": -30,
-      "left": 330,
-      "attrs": {
-        "value": "550"
-      }
+      "type": "wokwi-analog-joystick",
+      "id": "joystick",
+      "top": -190,
+      "left": -150,
+      "attrs": {}
     },
     {
       "type": "wokwi-slide-switch",
       "id": "plug",
-      "top": 90,
-      "left": 230,
+      "top": 330,
+      "left": -170,
       "attrs": {
         "value": "",
-        "bounce": "0"
-      }
-    },
-    {
-      "type": "wokwi-slide-switch",
-      "id": "estop",
-      "top": 90,
-      "left": 310,
-      "attrs": {
-        "value": "",
-        "bounce": "0"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btnStart",
-      "top": 150,
-      "left": 230,
-      "attrs": {
-        "color": "green",
-        "label": "START",
         "bounce": "0"
       }
     },
     {
       "type": "wokwi-pushbutton",
       "id": "btnStop",
-      "top": 150,
-      "left": 340,
+      "top": 400,
+      "left": -150,
       "attrs": {
         "color": "red",
         "label": "STOP",
@@ -107,58 +107,178 @@
       }
     },
     {
-      "type": "wokwi-servo",
-      "id": "lock",
-      "top": 80,
-      "left": 460,
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 330,
+      "left": 40,
       "attrs": {
-        "hornColor": "#ff8800"
-      }
-    },
-    {
-      "type": "wokwi-relay-module",
-      "id": "relay",
-      "top": 220,
-      "left": 460,
-      "attrs": {
-        "transistor": "npn"
+        "volume": "0.2"
       }
     },
     {
       "type": "wokwi-led",
-      "id": "load",
-      "top": 200,
-      "left": 660,
+      "id": "ledReady",
+      "top": 129,
+      "left": 239.4,
       "attrs": {
-        "color": "orange",
-        "label": "LOAD 12V"
+        "color": "green",
+        "label": "READY"
       }
     },
     {
       "type": "wokwi-resistor",
-      "id": "rLoad",
-      "top": 270,
-      "left": 690,
+      "id": "r_ledReady",
+      "top": 204.6,
+      "left": 225.45,
       "rotate": 90,
       "attrs": {
         "value": "220"
       }
     },
     {
-      "type": "wokwi-buzzer",
-      "id": "buzzer",
-      "top": 230,
-      "left": 250,
+      "type": "wokwi-led",
+      "id": "ledCharging",
+      "top": 129,
+      "left": 287.4,
       "attrs": {
-        "volume": "0.2"
+        "color": "blue",
+        "label": "CHARGE"
       }
     },
     {
-      "type": "wokwi-analog-joystick",
-      "id": "joystick",
-      "top": -200,
-      "left": -230,
-      "attrs": {}
+      "type": "wokwi-resistor",
+      "id": "r_ledCharging",
+      "top": 204.6,
+      "left": 273.45,
+      "rotate": 90,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledPayment",
+      "top": 129,
+      "left": 335.4,
+      "attrs": {
+        "color": "yellow",
+        "label": "PAY"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_ledPayment",
+      "top": 204.6,
+      "left": 321.45,
+      "rotate": 90,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledError",
+      "top": 129,
+      "left": 383.4,
+      "attrs": {
+        "color": "red",
+        "label": "ERROR"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_ledError",
+      "top": 204.6,
+      "left": 369.45,
+      "rotate": 90,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ledMaint",
+      "top": 129,
+      "left": 431.4,
+      "attrs": {
+        "color": "orange",
+        "label": "MAINT"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_ledMaint",
+      "top": 204.6,
+      "left": 417.45,
+      "rotate": 90,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "ev",
+      "top": 129,
+      "left": 479.4,
+      "attrs": {
+        "color": "white",
+        "label": "EV"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_ev",
+      "top": 204.6,
+      "left": 465.45,
+      "rotate": 90,
+      "attrs": {
+        "value": "220"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lblPlug",
+      "top": 308,
+      "left": -190,
+      "attrs": {
+        "text": "PLUG (cam sac)"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lblLock",
+      "top": 328,
+      "left": 220,
+      "attrs": {
+        "text": "KHOA DAU SAC"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lblStop",
+      "top": 378,
+      "left": -150,
+      "attrs": {
+        "text": "STOP (KTV)"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lblJoy",
+      "top": -212,
+      "left": -150,
+      "attrs": {
+        "text": "NGAN SACH / START"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lblRelay",
+      "top": 328,
+      "left": 420,
+      "attrs": {
+        "text": "RELAY"
+      }
     }
   ],
   "connections": [
@@ -211,49 +331,25 @@
       []
     ],
     [
-      "lcd:SDA",
-      "bb1:1t.b",
-      "blue",
-      []
-    ],
-    [
-      "lcd:SCL",
-      "bb1:2t.b",
-      "limegreen",
-      []
-    ],
-    [
-      "oled:SDA",
+      "ina219:SDA",
       "bb1:1t.c",
       "blue",
       []
     ],
     [
-      "oled:SCL",
+      "ina219:SCL",
       "bb1:2t.c",
       "limegreen",
       []
     ],
     [
-      "lcd:VCC",
-      "bb1:bp.5",
-      "red",
-      []
-    ],
-    [
-      "lcd:GND",
-      "bb1:bn.5",
-      "black",
-      []
-    ],
-    [
-      "oled:VCC",
+      "ina219:VCC",
       "bb1:tp.5",
       "red",
       []
     ],
     [
-      "oled:GND",
+      "ina219:GND",
       "bb1:tn.5",
       "black",
       []
@@ -265,24 +361,6 @@
       []
     ],
     [
-      "rfid:MOSI",
-      "esp:11",
-      "green",
-      []
-    ],
-    [
-      "rfid:SCK",
-      "esp:12",
-      "violet",
-      []
-    ],
-    [
-      "rfid:MISO",
-      "esp:13",
-      "gray",
-      []
-    ],
-    [
       "rfid:RST",
       "esp:14",
       "purple",
@@ -290,13 +368,13 @@
     ],
     [
       "rfid:3.3V",
-      "bb1:tp.10",
+      "bb1:tp.7",
       "red",
       []
     ],
     [
       "rfid:GND",
-      "bb1:tn.10",
+      "bb1:tn.7",
       "black",
       []
     ],
@@ -308,31 +386,37 @@
     ],
     [
       "temp:VCC",
-      "bb1:tp.14",
+      "bb1:tp.9",
       "red",
       []
     ],
     [
       "temp:GND",
-      "bb1:tn.14",
+      "bb1:tn.9",
       "black",
       []
     ],
     [
-      "current:SIG",
+      "joystick:HORZ",
       "esp:1",
       "cyan",
       []
     ],
     [
-      "current:VCC",
-      "bb1:tp.18",
+      "joystick:SEL",
+      "esp:2",
+      "orange",
+      []
+    ],
+    [
+      "joystick:VCC",
+      "bb1:tp.11",
       "red",
       []
     ],
     [
-      "current:GND",
-      "bb1:tn.18",
+      "joystick:GND",
+      "bb1:tn.11",
       "black",
       []
     ],
@@ -344,31 +428,7 @@
     ],
     [
       "plug:3",
-      "bb1:tn.22",
-      "black",
-      []
-    ],
-    [
-      "estop:2",
-      "esp:15",
-      "red",
-      []
-    ],
-    [
-      "estop:3",
-      "bb1:tn.26",
-      "black",
-      []
-    ],
-    [
-      "btnStart:1.l",
-      "esp:6",
-      "green",
-      []
-    ],
-    [
-      "btnStart:2.l",
-      "bb1:tn.30",
+      "bb1:tn.13",
       "black",
       []
     ],
@@ -380,67 +440,7 @@
     ],
     [
       "btnStop:2.l",
-      "bb1:tn.34",
-      "black",
-      []
-    ],
-    [
-      "lock:PWM",
-      "esp:17",
-      "orange",
-      []
-    ],
-    [
-      "lock:V+",
-      "bb1:bp.10",
-      "red",
-      []
-    ],
-    [
-      "lock:GND",
-      "bb1:bn.10",
-      "black",
-      []
-    ],
-    [
-      "relay:IN",
-      "esp:16",
-      "magenta",
-      []
-    ],
-    [
-      "relay:VCC",
-      "bb1:bp.14",
-      "red",
-      []
-    ],
-    [
-      "relay:GND",
-      "bb1:bn.14",
-      "black",
-      []
-    ],
-    [
-      "relay:COM",
-      "bb1:bp.18",
-      "red",
-      []
-    ],
-    [
-      "relay:NO",
-      "load:A",
-      "orange",
-      []
-    ],
-    [
-      "load:C",
-      "rLoad:1",
-      "black",
-      []
-    ],
-    [
-      "rLoad:2",
-      "bb1:bn.18",
+      "bb1:tn.19",
       "black",
       []
     ],
@@ -452,38 +452,416 @@
     ],
     [
       "buzzer:1",
-      "bb1:tn.38",
+      "bb1:tn.21",
       "black",
       []
     ],
     [
-      "joystick:HORZ",
-      "esp:2",
-      "green",
-      []
-    ],
-    [
-      "joystick:VERT",
-      "esp:3",
-      "blue",
-      []
-    ],
-    [
-      "joystick:SEL",
-      "esp:39",
+      "lock:PWM",
+      "esp:17",
       "orange",
       []
     ],
     [
-      "joystick:VCC",
-      "bb1:tp.42",
+      "lock:V+",
+      "bb1:bp.2",
       "red",
       []
     ],
     [
-      "joystick:GND",
-      "bb1:tn.42",
+      "lock:GND",
+      "bb1:bn.2",
       "black",
+      []
+    ],
+    [
+      "relay:IN",
+      "esp:16",
+      "magenta",
+      []
+    ],
+    [
+      "relay:VCC",
+      "bb1:bp.4",
+      "red",
+      []
+    ],
+    [
+      "relay:GND",
+      "bb1:bn.4",
+      "black",
+      []
+    ],
+    [
+      "battery:BAT+",
+      "relay:COM",
+      "red",
+      []
+    ],
+    [
+      "relay:NO",
+      "ina219:VIN+",
+      "red",
+      []
+    ],
+    [
+      "ina219:VIN-",
+      "bb1:30t.c",
+      "orange",
+      []
+    ],
+    [
+      "battery:BAT-",
+      "bb1:bn.6",
+      "black",
+      []
+    ],
+    [
+      "ledReady:A",
+      "bb1:5t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "ledReady:C",
+      "bb1:4t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledReady:1",
+      "bb1:4t.b",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledReady:2",
+      "bb1:4b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp:38",
+      "bb1:5t.c",
+      "green",
+      []
+    ],
+    [
+      "bb1:4b.j",
+      "bb1:bn.3",
+      "black",
+      []
+    ],
+    [
+      "ledCharging:A",
+      "bb1:10t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "ledCharging:C",
+      "bb1:9t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledCharging:1",
+      "bb1:9t.b",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledCharging:2",
+      "bb1:9b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp:39",
+      "bb1:10t.c",
+      "blue",
+      []
+    ],
+    [
+      "bb1:9b.j",
+      "bb1:bn.8",
+      "black",
+      []
+    ],
+    [
+      "ledPayment:A",
+      "bb1:15t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "ledPayment:C",
+      "bb1:14t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledPayment:1",
+      "bb1:14t.b",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledPayment:2",
+      "bb1:14b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp:40",
+      "bb1:15t.c",
+      "yellow",
+      []
+    ],
+    [
+      "bb1:14b.j",
+      "bb1:bn.12",
+      "black",
+      []
+    ],
+    [
+      "ledError:A",
+      "bb1:20t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "ledError:C",
+      "bb1:19t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledError:1",
+      "bb1:19t.b",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledError:2",
+      "bb1:19b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp:41",
+      "bb1:20t.c",
+      "red",
+      []
+    ],
+    [
+      "bb1:19b.j",
+      "bb1:bn.16",
+      "black",
+      []
+    ],
+    [
+      "ledMaint:A",
+      "bb1:25t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "ledMaint:C",
+      "bb1:24t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledMaint:1",
+      "bb1:24t.b",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ledMaint:2",
+      "bb1:24b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "esp:42",
+      "bb1:25t.c",
+      "orange",
+      []
+    ],
+    [
+      "bb1:24b.j",
+      "bb1:bn.20",
+      "black",
+      []
+    ],
+    [
+      "ev:A",
+      "bb1:30t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "ev:C",
+      "bb1:29t.a",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ev:1",
+      "bb1:29t.b",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "r_ev:2",
+      "bb1:29b.f",
+      "",
+      [
+        "$bb"
+      ]
+    ],
+    [
+      "bb1:29b.j",
+      "bb1:bn.24",
+      "black",
+      []
+    ],
+    [
+      "esp:11",
+      "bb1:6t.a",
+      "green",
+      []
+    ],
+    [
+      "rfid:MOSI",
+      "bb1:6t.b",
+      "green",
+      []
+    ],
+    [
+      "tft:MOSI",
+      "bb1:6t.c",
+      "green",
+      []
+    ],
+    [
+      "esp:12",
+      "bb1:7t.a",
+      "violet",
+      []
+    ],
+    [
+      "rfid:SCK",
+      "bb1:7t.b",
+      "violet",
+      []
+    ],
+    [
+      "tft:SCK",
+      "bb1:7t.c",
+      "violet",
+      []
+    ],
+    [
+      "esp:13",
+      "bb1:8t.a",
+      "gray",
+      []
+    ],
+    [
+      "rfid:MISO",
+      "bb1:8t.b",
+      "gray",
+      []
+    ],
+    [
+      "tft:MISO",
+      "bb1:8t.c",
+      "gray",
+      []
+    ],
+    [
+      "tft:CS",
+      "esp:15",
+      "orange",
+      []
+    ],
+    [
+      "tft:D/C",
+      "esp:6",
+      "cyan",
+      []
+    ],
+    [
+      "tft:RST",
+      "esp:21",
+      "purple",
+      []
+    ],
+    [
+      "tft:VCC",
+      "bb1:tp.13",
+      "red",
+      []
+    ],
+    [
+      "tft:GND",
+      "bb1:tn.15",
+      "black",
+      []
+    ],
+    [
+      "tft:LED",
+      "bb1:tp.15",
+      "red",
       []
     ]
   ],

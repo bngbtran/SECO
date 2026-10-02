@@ -29,7 +29,13 @@ import { dur, fDate, fTimeS, kwh, num, rel, shortId, vnd } from "../../../shared
 import { useApi, useInterval } from "../../../shared/hooks";
 import { ERROR_LABEL } from "../../../shared/labels";
 import { useRealtime, useRealtimeRefresh } from "../../../shared/realtime";
-import type { AdminStationDetail, StationCommand, StationCommandResult, Telemetry } from "../../../shared/types";
+import type {
+  AdminSessionDetail,
+  AdminStationDetail,
+  StationCommand,
+  StationCommandResult,
+  Telemetry,
+} from "../../../shared/types";
 import {
   AvailabilityBadge,
   Badge,
@@ -183,6 +189,43 @@ function CommandDialog({
   );
 }
 
+/**
+ * A guest is waiting to pay on this station: link to the sandbox payment page
+ * (the same page the QR on the station screen opens), so the demo can pay
+ * without scanning the screen.
+ */
+function PendingPayment({ sessionId }: { sessionId: string }) {
+  const detail = useApi<AdminSessionDetail>(`/admin/sessions/${sessionId}`);
+  useInterval(detail.reload, 5_000);
+  const pending = detail.data?.payments.find((p) => p.status === "PENDING");
+  const last = detail.data?.payments[0];
+
+  return (
+    <div
+      className="card mt"
+      style={{ borderColor: "var(--amber)", background: "var(--amber-50)", padding: "14px 18px" }}
+    >
+      <div className="between">
+        <div>
+          <b>Khách đang chờ thanh toán {detail.data ? vnd(detail.data.cost_vnd) : ""}</b>
+          <div className="muted" style={{ fontSize: 13 }}>
+            {pending
+              ? `Đầu cắm đang khoá. QR hết hạn lúc ${fTimeS(pending.expires_at)}.`
+              : last
+                ? `QR ${last.status === "CANCELLED" ? "đã huỷ" : "đã hết hạn"}: khách bấm joystick trên trụ để tạo QR mới.`
+                : "Đang tạo QR…"}
+          </div>
+        </div>
+        {pending && (
+          <a className="btn btn-primary" href={`/pay/${pending.payment_id}`} target="_blank" rel="noreferrer">
+            Mở trang thanh toán (Sandbox)
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function StationDetailPage() {
   const { stationId = "" } = useParams();
   const navigate = useNavigate();
@@ -278,6 +321,8 @@ export default function StationDetailPage() {
         </div>
       </div>
 
+      {session?.status === "WAITING_PAYMENT" && <PendingPayment sessionId={session.session_id} />}
+
       <div className="gauges">
         <GaugeBox icon={Zap} label="Điện áp" value={station.is_online && t.voltage_v != null ? t.voltage_v.toFixed(2) : "—"} unit="V" pct={((t.voltage_v ?? 0) / 13) * 100} />
         <GaugeBox icon={Activity} label="Dòng điện" value={charging ? num(t.current_a).toFixed(2) : "0.00"} unit="A" pct={charging ? (num(t.current_a) / 15) * 100 : 0} color="var(--blue)" />
@@ -288,7 +333,7 @@ export default function StationDetailPage() {
           value={station.is_online && temp != null ? temp.toFixed(1) : "—"}
           unit="°C"
           pct={((temp ?? 0) / 80) * 100}
-          color={temp != null && temp >= 60 ? "var(--red)" : temp != null && temp > 45 ? "var(--amber)" : "var(--primary)"}
+          color={temp != null && temp >= 35 ? "var(--red)" : temp != null && temp > 30 ? "var(--amber)" : "var(--primary)"}
         />
       </div>
 

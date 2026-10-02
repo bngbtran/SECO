@@ -79,6 +79,11 @@ def test_technician_takes_station_from_error_to_maintenance_and_back(station_io)
             await handle_message(f"evcs/{station_id}/event", b'{"event":"ESTOP"}')
             assert (await stations.find_one({"station_id": station_id}))["status"] == "ERROR"
 
+            # After a reboot the station learns why it is in ERROR.
+            await req(station_id, '{"type":"STATION_SYNC"}')
+            assert station_io["res"][-1]["status"] == "ERROR"
+            assert station_io["res"][-1]["error"]["error_type"] == "E_STOP"
+
             await req(station_id, f'{{"type":"TECHNICIAN_VERIFY","uid":"{member_uid}"}}')
             assert station_io["res"][-1] == {"type": "TECHNICIAN_VERIFY", "ok": False, "error": "NOT_TECHNICIAN"}
 

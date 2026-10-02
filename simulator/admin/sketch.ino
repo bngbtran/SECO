@@ -192,7 +192,7 @@ void drawStatusBar() {
 }
 
 void drawSpinner(int16_t cx, int16_t cy, int16_t r) {
-  int active = (millis() / 120) % 8;
+  int active = (millis() / 250) % 8;
   for (int i = 0; i < 8; i++) {
     float a = i * PI / 4;
     int16_t px = cx + cos(a) * r, py = cy + sin(a) * r;
@@ -276,6 +276,17 @@ void drawNotice() {
   if (notice.hint.length()) label(notice.hint, 0, 62, 128, true);
 }
 
+/** Send the frame only when it changed: the 1 KB I2C transfer is the slow part. */
+void flush() {
+  static uint32_t lastHash = 0;
+  const uint8_t *buffer = oled.getBuffer();
+  uint32_t hash = 2166136261u;  // FNV-1a
+  for (int i = 0; i < 128 * 64 / 8; i++) hash = (hash ^ buffer[i]) * 16777619u;
+  if (hash == lastHash) return;
+  lastHash = hash;
+  oled.display();
+}
+
 void render() {
   if (!OLED_ENABLED) return;
   oled.clearDisplay();
@@ -284,7 +295,7 @@ void render() {
   else if (WiFi.status() != WL_CONNECTED || !mqtt.connected()) drawConnecting();
   else if (waiting) drawWaiting();
   else drawIdle();
-  oled.display();
+  flush();
 }
 
 /** Show a result for a few seconds, then go back to the current screen. */
@@ -512,7 +523,7 @@ void loop() {
 
   // Animations (waves, spinner, countdown).
   static unsigned long lastFrame = 0;
-  if (millis() - lastFrame > 100) {
+  if (millis() - lastFrame > 250) {
     lastFrame = millis();
     render();
   }

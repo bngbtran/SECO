@@ -17,8 +17,8 @@ if ! arduino-cli core list | grep -q "^esp32:esp32"; then
   arduino-cli core update-index
   arduino-cli core install esp32:esp32
 fi
-for lib in PubSubClient ArduinoJson "LiquidCrystal I2C" MFRC522 "Adafruit SSD1306" "Adafruit GFX Library" \
-  OneWire DallasTemperature ESP32Servo QRCodeGenerator; do
+for lib in PubSubClient ArduinoJson MFRC522 "Adafruit ILI9341" "Adafruit GFX Library" "Adafruit INA219" \
+  OneWire DallasTemperature QRCodeGenerator; do
   arduino-cli lib list | grep -q "^${lib} " || arduino-cli lib install "$lib"
 done
 
