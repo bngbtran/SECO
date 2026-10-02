@@ -1,0 +1,65 @@
+# Render Blueprint: SECO backend (FastAPI) on the free plan.
+#
+# Auto deploy: every commit that reaches `main` (a merged pull request) and
+# touches apps/api/ rebuilds and redeploys the API. Commits that only change
+# the web app, the simulators or the docs do not redeploy it (rootDir).
+#
+# Secrets are not stored here (sync: false): fill them in the Render dashboard
+# once, when the Blueprint is created. See docs/deploy-render.md.
+services:
+  - type: web
+    name: seco-api
+    runtime: python
+    region: singapore        # closest to Vietnam and to the Atlas cluster (AWS ap-southeast-1)
+    plan: free
+    branch: main
+    rootDir: apps/api
+    buildCommand: pip install .
+    # uvicorn directly: $PORT from Render, asyncio loop (uvloop breaks aiomqtt),
+    # proxy headers from Render's load balancer.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --loop asyncio --proxy-headers --forwarded-allow-ips '*'
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: APP_ENV
+        value: production
+
+      # MongoDB Atlas (shared team cluster)
+      - key: MONGO_URI
+        sync: false
+      # First deploy check: seco_render_check (empty scratch database).
+      # After merging dev into main: seco (the team database).
+      - key: MONGO_DATABASE
+        sync: false
+
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Cloud MQTT broker (HiveMQ Cloud / EMQX Serverless: TLS on 8883)
+      - key: MQTT_HOST
+        sync: false
+      - key: MQTT_PORT
+        value: "8883"
+      - key: MQTT_TLS
+        value: "true"
+      - key: MQTT_USERNAME
+        sync: false
+      - key: MQTT_PASSWORD
+        sync: false
+      - key: MQTT_CLIENT_ID
+        value: seco-api-render
+      - key: MQTT_SHARE_GROUP
+        value: seco-api
+
+      # Web app (CORS origin) and the guest payment page in the QR
+      - key: WEB_ORIGIN
+        sync: false
+      - key: GUEST_PAYMENT_URL_BASE
+        sync: false
+
+      - key: ADMIN_READER_ID
+        value: READER-01
+      - key: DEMO_TOPUP_ENABLED
+        value: "true"
