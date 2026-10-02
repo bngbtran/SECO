@@ -6,10 +6,15 @@
 #define WIFI_SSID "your-wifi"
 #define WIFI_PASSWORD "your-password"
 
-// LAN IP of the computer running Mosquitto + the API (macOS: `ipconfig getifaddr en0`).
-// Not "localhost": that would be the ESP32 itself.
-#define MQTT_HOST "192.168.1.56"
-#define MQTT_PORT 1883
+// Broker, the same one the API uses.
+// Deployed API (Render): broker.hivemq.com over TLS.
+#define MQTT_HOST "broker.hivemq.com"
+#define MQTT_PORT 8883
+#define MQTT_TLS 1
+#define MQTT_USERNAME nullptr  // "user" / "password" for a private broker (HiveMQ Cloud)
+#define MQTT_PASSWORD nullptr
+// Local API instead: LAN IP of the computer running Mosquitto (macOS:
+// `ipconfig getifaddr en0`, not "localhost"), port 1883, MQTT_TLS 0.
 
 // Must match ADMIN_READER_ID in apps/api/.env (default READER-01).
 #define READER_ID "READER-01"

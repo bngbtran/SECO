@@ -61,6 +61,10 @@ Copy `config.example.h` thành `config.h` (cùng thư mục) rồi sửa:
 - IP của máy: `ipconfig getifaddr en0` (macOS). ESP32 và laptop phải ở **cùng một mạng WiFi**.
 - **Không** dùng `localhost` hay `host.wokwi.internal`: đó là địa chỉ cho bản mô phỏng.
 
+**Chọn broker trong `config.h`.** Đầu đọc và API phải dùng chung một broker:
+- **API trên Render:** `MQTT_HOST "broker.hivemq.com"`, `MQTT_PORT 8883`, `MQTT_TLS 1`. Đây là mặc định trong `config.example.h`.
+- **API chạy local:** `MQTT_HOST` là IP LAN của máy, `MQTT_PORT 1883`, `MQTT_TLS 0`.
+
 ## 5. Chạy
 
 Mọi lệnh đều chạy sau `conda activate iad`.

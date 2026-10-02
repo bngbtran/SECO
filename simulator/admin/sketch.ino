@@ -29,6 +29,7 @@
 #include <PubSubClient.h>
 #include <SPI.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <Wire.h>
 
 // ---- Configuration ---------------------------------------------------------
@@ -36,10 +37,20 @@
 const char *WIFI_SSID = "Wokwi-GUEST";
 const char *WIFI_PASSWORD = "";
 
-// host.wokwi.internal = your computer, reached through the Wokwi private
-// gateway (VS Code). Run Mosquitto there on port 1883, same broker as the API.
+// Broker. MQTT_CLOUD 1: broker.hivemq.com over TLS (8883), the broker of the
+// API deployed on Render (https://seco-backend-api.onrender.com). MQTT_CLOUD 0:
+// Mosquitto on your computer through the Wokwi gateway, for the API run locally
+// (`python -m app`). The station and the API must use the same broker.
+#define MQTT_CLOUD 1
+#if MQTT_CLOUD
+const char *MQTT_HOST = "broker.hivemq.com";
+const uint16_t MQTT_PORT = 8883;
+#else
 const char *MQTT_HOST = "host.wokwi.internal";
 const uint16_t MQTT_PORT = 1883;
+#endif
+const char *MQTT_USERNAME = nullptr;  // set both for a private broker (HiveMQ Cloud)
+const char *MQTT_PASSWORD = nullptr;
 
 // Must match ADMIN_READER_ID of the API (default READER-01).
 const char *READER_ID = "READER-01";
@@ -61,7 +72,11 @@ const unsigned long MESSAGE_MS = 3500;  // how long a result stays on the OLED
 
 // ---- State -----------------------------------------------------------------
 
+#if MQTT_CLOUD
+WiFiClientSecure wifi;  // TLS
+#else
 WiFiClient wifi;
+#endif
 PubSubClient mqtt(wifi);
 Adafruit_SSD1306 oled(128, 64, &Wire, -1);  // SSD1306 128x64 I2C, 0x3C
 MFRC522 rfid(RFID_SS, RFID_RST);
@@ -385,7 +400,7 @@ void onMessage(char *rawTopic, byte *payload, unsigned int length) {
 void connectMqtt() {
   String clientId = String("seco-") + READER_ID + "-" + String((uint32_t)ESP.getEfuseMac(), HEX);
   // Last will: the broker marks the reader OFFLINE if we disappear.
-  if (mqtt.connect(clientId.c_str(), nullptr, nullptr, topic("status").c_str(), 0, true, "OFFLINE")) {
+  if (mqtt.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD, topic("status").c_str(), 0, true, "OFFLINE")) {
     mqtt.publish(topic("status").c_str(), "ONLINE", true);
     mqtt.subscribe(topic("cmd").c_str());
     mqtt.subscribe(topic("res").c_str());
@@ -490,8 +505,14 @@ void setup() {
   }
   Serial.printf("WiFi connected, IP %s\n", WiFi.localIP().toString().c_str());
 
+#if MQTT_CLOUD
+  // Encrypted but not authenticated: fine for the demo broker. Pin the CA
+  // (wifi.setCACert) for a private broker.
+  wifi.setInsecure();
+#endif
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setBufferSize(1024);
+  mqtt.setKeepAlive(30);
   mqtt.setCallback(onMessage);
   connectMqtt();
   Serial.println("Tap a card on the MFRC522 (click it in Wokwi, pick a card, Tap) or type a hex UID + Enter");

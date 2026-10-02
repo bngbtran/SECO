@@ -70,6 +70,7 @@
 #include <QRCodeGenerator.h>
 #include <SPI.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <Wire.h>
 
 // ---- Configuration ---------------------------------------------------------
@@ -77,9 +78,20 @@
 const char *WIFI_SSID = "Wokwi-GUEST";
 const char *WIFI_PASSWORD = "";
 
-// host.wokwi.internal = your computer through the Wokwi private gateway (VS Code).
+// Broker. MQTT_CLOUD 1: broker.hivemq.com over TLS (8883), the broker of the
+// API deployed on Render (https://seco-backend-api.onrender.com). MQTT_CLOUD 0:
+// Mosquitto on your computer through the Wokwi gateway, for the API run locally
+// (`python -m app`). The station and the API must use the same broker.
+#define MQTT_CLOUD 1
+#if MQTT_CLOUD
+const char *MQTT_HOST = "broker.hivemq.com";
+const uint16_t MQTT_PORT = 8883;
+#else
 const char *MQTT_HOST = "host.wokwi.internal";
 const uint16_t MQTT_PORT = 1883;
+#endif
+const char *MQTT_USERNAME = nullptr;  // set both for a private broker (HiveMQ Cloud)
+const char *MQTT_PASSWORD = nullptr;
 
 const char *STATION_ID = "EVCS-01";
 const char *FIRMWARE = "station-sim-2.1";
@@ -116,7 +128,11 @@ const int BUDGET_COUNT = sizeof(BUDGET_LEVELS) / sizeof(BUDGET_LEVELS[0]);
 
 // ---- Devices ---------------------------------------------------------------
 
+#if MQTT_CLOUD
+WiFiClientSecure wifi;  // TLS
+#else
 WiFiClient wifi;
+#endif
 PubSubClient mqtt(wifi);
 Adafruit_ILI9341 tft(TFT_CS, TFT_DC, TFT_RST);  // 2.8" 240x320 colour TFT on the RFID SPI bus
 Adafruit_INA219 ina219(0x40);
@@ -1178,7 +1194,7 @@ void onMessage(char *rawTopic, byte *payload, unsigned int length) {
 
 void connectMqtt() {
   String clientId = String("seco-") + STATION_ID + "-" + String((uint32_t)ESP.getEfuseMac(), HEX);
-  if (mqtt.connect(clientId.c_str(), nullptr, nullptr, topic("status").c_str(), 0, true, "OFFLINE")) {
+  if (mqtt.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD, topic("status").c_str(), 0, true, "OFFLINE")) {
     mqtt.publish(topic("status").c_str(), "ONLINE", true);
     mqtt.subscribe(topic("cmd").c_str());
     mqtt.subscribe(topic("res").c_str());
@@ -1511,8 +1527,14 @@ void setup() {
   }
   Serial.printf(" connected, IP %s\r\n", WiFi.localIP().toString().c_str());
 
+#if MQTT_CLOUD
+  // Encrypted but not authenticated: fine for the demo broker. Pin the CA
+  // (wifi.setCACert) for a private broker.
+  wifi.setInsecure();
+#endif
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setBufferSize(2048);
+  mqtt.setKeepAlive(30);
   mqtt.setCallback(onMessage);
   connectMqtt();
 }

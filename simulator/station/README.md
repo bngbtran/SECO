@@ -14,9 +14,18 @@ Trụ giao tiếp với API qua MQTT `evcs/EVCS-01/*`.
 
 Mọi lệnh chạy sau `conda activate iad`.
 
-1. Mosquitto (cổng 1883), API (`cd apps/api && python -m app`), web (`npm run dev:web`). Trạm `EVCS-01` đã có trong seed.
-2. `cd simulator/station && ./build.sh`: build firmware.
-3. Trong VS Code, mở `simulator/station/diagram.json` rồi chạy **Wokwi: Start Simulator**.
+Trụ và API phải dùng **cùng một MQTT broker**. Chọn bằng `#define MQTT_CLOUD` ở đầu `sketch.ino`:
+
+| `MQTT_CLOUD` | Broker | Dùng với |
+|---|---|---|
+| **`1`** (mặc định) | `broker.hivemq.com:8883` (TLS) | API đã deploy trên Render (`https://seco-backend-api.onrender.com`) và web `https://iad-seco.vercel.app`. **Không cần chạy gì trên máy.** |
+| `0` | Mosquitto trên máy qua `host.wokwi.internal:1883` | API chạy local (`cd apps/api && python -m app`) và `npm run dev:web` |
+
+1. Chọn `MQTT_CLOUD`, rồi `cd simulator/station && ./build.sh` để build firmware.
+2. Trong VS Code, mở `simulator/station/diagram.json` rồi chạy **Wokwi: Start Simulator**.
+3. Mở web admin. Trạm `EVCS-01` (đã có trong seed) chuyển sang online và cập nhật realtime.
+
+`broker.hivemq.com` là broker công khai: ai cũng đọc và gửi được vào topic `evcs/...`. Chỉ nên dùng để demo. Với broker riêng (HiveMQ Cloud), điền `MQTT_HOST`, `MQTT_USERNAME`, `MQTT_PASSWORD` trong sketch, và đặt các giá trị tương ứng trên Render.
 
 Hai linh kiện tự làm, INA219 và pin 9V, đã được biên dịch sẵn thành `chips/*.chip.wasm`. Chỉ cần chạy `chips/build.sh` khi sửa file `.chip.c`; script tự tải wasi-sdk.
 
