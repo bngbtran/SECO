@@ -4,6 +4,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Project environment: every SECO command runs inside conda env "iad".
+if [ "${CONDA_DEFAULT_ENV:-}" != "iad" ]; then
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda activate iad
+fi
+
 FQBN="esp32:esp32:esp32s3"
 
 if ! arduino-cli core list | grep -q "^esp32:esp32"; then
@@ -11,7 +17,7 @@ if ! arduino-cli core list | grep -q "^esp32:esp32"; then
   arduino-cli core update-index
   arduino-cli core install esp32:esp32
 fi
-for lib in PubSubClient ArduinoJson "LiquidCrystal I2C" MFRC522; do
+for lib in PubSubClient ArduinoJson MFRC522 "Adafruit SSD1306" "Adafruit GFX Library"; do
   arduino-cli lib list | grep -q "^${lib} " || arduino-cli lib install "$lib"
 done
 

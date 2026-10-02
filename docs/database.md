@@ -78,7 +78,7 @@ All demo accounts use the password **`seco`**.
 | tunv@seco.com | Nguyễn Văn Tú | ADMIN | – | – | – |
 | nguyenlb@seco.com | Lê Bảo Nguyên | ADMIN | – | – | – |
 | hieuln@seco.com | Lê Ngọc Hiếu | ADMIN | – | – | – |
-| tech@seco.com | SECO Technician | TECHNICIAN | – | `7E1C2A9F` | – |
+| tech@seco.com | SECO Technician | TECHNICIAN | – | `7E1C2A9F`, `C0FFEE99` (Wokwi Key Fob) | – |
 | user@seco.com | SECO Member | USER | 200 000 | `A1B2C3D4` (+ `D4E5F6A7` locked, + 1 card pending registration) | 43A-123.45 VinFast VF e34 |
 
 ## Setting up the shared Atlas cluster (DB owner, once)

@@ -1,0 +1,10 @@
+# Libraries for the Wokwi web editor (VS Code builds locally with build.sh).
+PubSubClient
+ArduinoJson
+Adafruit INA219
+MFRC522
+Adafruit ILI9341
+Adafruit GFX Library
+OneWire
+DallasTemperature
+QRCodeGenerator

@@ -137,6 +137,11 @@ async def announce_guest_stopped(result: dict, *, send_stop: bool = True) -> Non
                 "command": "STOP",
                 "session_id": session["session_id"],
                 "reason": session.get("stop_reason"),
+                "type": session.get("type"),
+                "energy_kwh": session.get("energy_kwh"),
+                "cost_vnd": int(session.get("cost_vnd", 0)),
+                # False: cost 0 (under one 30 s tick), COMPLETED without a QR.
+                "requires_payment": result["requires_payment"],
             },
         )
 

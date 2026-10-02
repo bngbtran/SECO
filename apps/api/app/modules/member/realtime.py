@@ -77,12 +77,19 @@ async def announce_stopped(result: dict, *, send_stop: bool = True) -> None:
     session = result["session"]
 
     if send_stop:
+        # The final bill, so the station shows what was actually charged.
+        transaction = result.get("transaction") or {}
         await publish_station_command(
             session["station_id"],
             {
                 "command": "STOP",
                 "session_id": session["session_id"],
                 "reason": session.get("stop_reason"),
+                "type": session.get("type"),
+                "energy_kwh": session.get("energy_kwh"),
+                "cost_vnd": int(session.get("cost_vnd", 0)),
+                "charged_vnd": transaction.get("amount_vnd", 0),
+                "balance_after_vnd": transaction.get("balance_after_vnd"),
             },
         )
 

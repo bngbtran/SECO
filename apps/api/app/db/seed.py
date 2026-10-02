@@ -73,6 +73,9 @@ RFID_CARDS = [
     # Registration in progress (FR02): no UID until the card is scanned at a station.
     ("CARD-USER-NEW", None, "user@seco.com", "Thẻ đang đăng ký", True, True),
     ("CARD-TECH-01", "7E1C2A9F", "tech@seco.com", "Thẻ kỹ thuật viên", True, False),
+    # Same technician, Wokwi MFRC522 preset "Key Fob" (C0:FF:EE:99): pick it in
+    # the reader panel of simulator/station to do the DD 3.3 maintenance flow.
+    ("CARD-TECH-SIM", "C0FFEE99", "tech@seco.com", "Móc khóa KTV (Wokwi)", True, False),
 ]
 
 # (vehicle_id, owner email, plate, brand, model, battery_kwh)
