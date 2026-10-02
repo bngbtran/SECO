@@ -1,0 +1,5 @@
+{
+  "name": "9V Battery",
+  "author": "SECO team",
+  "pins": ["BAT+", "BAT-"]
+}

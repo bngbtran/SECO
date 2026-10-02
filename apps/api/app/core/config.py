@@ -24,12 +24,29 @@ class Settings(BaseSettings):
     mqtt_password: str | None = None
     mqtt_tls: bool = False
     mqtt_client_id: str = "seco-api"
+    # API instances sharing a broker form one shared-subscription group for
+    # station requests, so each request is handled (and answered) once.
+    # Empty disables it (every instance handles every request).
+    mqtt_share_group: str = "seco-api"
+
+    # Admin desk RFID reader used to assign cards to members (simulator/admin).
+    admin_reader_id: str = "READER-01"
+    card_registration_timeout_seconds: int = 90
 
     web_origin: str = "http://localhost:5173"
 
     energy_power_kw: str = "0.15"
     energy_tick_seconds: int = 30
     price_per_kwh_vnd: int = 4000
+    session_ticker_interval_seconds: int = 5
+
+    demo_topup_enabled: bool = False
+    demo_topup_max_vnd: int = 10_000_000
+
+    guest_max_budget_vnd: int = 1_000_000
+    guest_payment_ttl_seconds: int = 300
+    # The QR encodes <base>/<payment_id>; the web app serves the sandbox payment page there.
+    guest_payment_url_base: str = "http://localhost:5173/pay"
 
     model_config = SettingsConfigDict(
         env_file=API_ROOT / ".env",

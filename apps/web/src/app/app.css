@@ -1,0 +1,146 @@
+/* Adjustments on top of prototype.css (copied from the screen-flow prototype)
+   for the standalone admin app: no top tab bar, the admin shell fills the window. */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  display: block;
+  min-height: 0;
+}
+
+.admin {
+  height: 100vh;
+}
+
+.side .brand {
+  padding: 4px 10px 10px;
+}
+
+.side-foot .logout {
+  margin-top: 10px;
+}
+
+.pill-live .dot.off {
+  background: var(--gray);
+  animation: none;
+  box-shadow: none;
+}
+
+.bell {
+  position: relative;
+}
+
+.bell .cnt {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+a.link,
+button.link {
+  color: var(--primary);
+  font-weight: 500;
+  text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+a.link:hover,
+button.link:hover {
+  text-decoration: underline;
+}
+
+.login {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100vh;
+}
+
+.login-hero {
+  background: var(--primary);
+  color: #fff;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-form {
+  display: grid;
+  place-items: center;
+  padding: 40px;
+}
+
+.vehicle {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.rfid {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--primary-50), #fff);
+}
+
+.rfid.off {
+  background: var(--muted);
+}
+
+@media (max-width: 980px) {
+  .admin {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .login {
+    grid-template-columns: 1fr;
+  }
+
+  .login-hero {
+    display: none;
+  }
+}
+
+/* NavLink renders <a>; the prototype styled <button>. */
+a.nav {
+  text-decoration: none;
+}
+
+.cmd[disabled] {
+  cursor: not-allowed;
+}
+
+@media print {
+  .side,
+  .ahead,
+  .ph .row .btn {
+    display: none !important;
+  }
+
+  .admin {
+    display: block;
+  }
+}

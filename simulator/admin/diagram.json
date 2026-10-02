@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "author": "SECO team - admin desk RFID reader",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-s3-devkitc-1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    {
+      "type": "board-mfrc522",
+      "id": "rfid",
+      "top": 170,
+      "left": -300,
+      "rotate": 270,
+      "attrs": { "uid": "A1:B2:C3:D4" }
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled1",
+      "top": -35.26,
+      "left": -239.77,
+      "attrs": { "i2cAddress": "0x3c" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "rfid:3.3V", "esp:3V3.1", "red", [ "v12.96", "h145.15", "v-335.82" ] ],
+    [ "rfid:GND", "esp:GND.2", "black", [ "v32.16", "h279.55", "v-355.02" ] ],
+    [ "rfid:SDA", "esp:10", "orange", [ "v70.56", "h164.35", "v-249.42" ] ],
+    [ "rfid:MOSI", "esp:11", "green", [ "v51.36", "h154.75", "v-220.62" ] ],
+    [ "rfid:SCK", "esp:12", "violet", [ "v60.96", "h173.95", "v-220.62" ] ],
+    [ "rfid:MISO", "esp:13", "gray", [ "v41.76", "h164.35", "v-191.82" ] ],
+    [ "rfid:RST", "esp:14", "purple", [ "v22.56", "h145.15", "v-163.02" ] ],
+    [ "oled1:GND", "esp:GND.1", "black", [ "v-9.6", "h-67.2", "v268.98" ] ],
+    [ "oled1:VCC", "esp:3V3.2", "red", [ "v-9.6", "h0.15", "v-19.2", "h-96", "v96", "h293.08" ] ],
+    [ "oled1:SDA", "esp:8", "yellow", [ "v-38.4", "h-124.73", "v201.78" ] ],
+    [ "oled1:SCL", "esp:9", "green", [ "v-19.2", "h-95.7", "v211.38" ] ]
+  ],
+  "dependencies": {}
+}

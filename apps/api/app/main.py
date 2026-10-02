@@ -2,13 +2,18 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.db.indexes import create_indexes
+from app.core.dependencies import user_from_token
+from app.db.migrations import apply_migrations
 from app.db.mongodb import check_database, close_database
+from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
+from app.modules.charging.ticker import run_session_ticker
+from app.modules.guest.router import router as guest_router
+from app.modules.member.router import router as member_router
 from app.modules.station.router import router as station_router
 from app.mqtt.client import mqtt_service
 from app.mqtt.watchdog import run_station_watchdog
@@ -25,25 +30,22 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await check_database()
-    await create_indexes()
+    await apply_migrations()
 
-    mqtt_service.add_broadcast_handler(manager.broadcast)
+    # Handlers push their own filtered WebSocket events; raw MQTT results are not
+    # broadcast because they can contain member data (RFID owner, balance).
     mqtt_task = asyncio.create_task(mqtt_service.run())
     watchdog_task = asyncio.create_task(run_station_watchdog())
+    ticker_task = asyncio.create_task(run_session_ticker())
 
     yield
 
-    mqtt_task.cancel()
-    watchdog_task.cancel()
-    try:
-        await mqtt_task
-    except asyncio.CancelledError:
-        pass
-
-    try:
-        await watchdog_task
-    except asyncio.CancelledError:
-        pass
+    for task in (mqtt_task, watchdog_task, ticker_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     await close_database()
 
@@ -65,7 +67,9 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(station_router)
-
+app.include_router(member_router)
+app.include_router(guest_router)
+app.include_router(admin_router)
 
 # HEAD too: uptime monitors (UptimeRobot) ping with HEAD to keep the free Render instance awake.
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])
@@ -79,9 +83,25 @@ async def health():
     }
 
 
+async def _websocket_user(token: str | None) -> dict | None:
+    if not token:
+        return None
+    try:
+        user = await user_from_token(token)
+    except HTTPException:
+        return None
+    return user if user.get("is_active") else None
+
+
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
+async def websocket_endpoint(websocket: WebSocket, token: str | None = None):
+    """Realtime updates. Pass ?token=<JWT> to also receive your own session events."""
+    user = await _websocket_user(token)
+    if token and user is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await manager.connect(websocket, user)
     try:
         while True:
             await websocket.receive_text()

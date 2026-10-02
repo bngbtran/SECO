@@ -1,0 +1,9 @@
+{
+  "name": "INA219",
+  "author": "SECO team",
+  "pins": ["VCC", "GND", "SCL", "SDA", "VIN+", "VIN-"],
+  "controls": [
+    { "id": "busVoltage", "label": "Dien ap pin (V)", "type": "range", "min": 0, "max": 12, "step": 0.1 },
+    { "id": "loadCurrent", "label": "Dong sac (mA)", "type": "range", "min": 0, "max": 2000, "step": 10 }
+  ]
+}
