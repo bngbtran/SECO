@@ -5,6 +5,13 @@ as it was at that moment (status, link, telemetry, open errors, the member's
 session there), writes an audit entry and notifies every technician.
 OPEN -> IN_PROGRESS (a technician accepts it) -> RESOLVED (with a note);
 the member can cancel while it is still OPEN.
+
+Resolving a request does not change the station: only the technician at the
+station does that (technician card + STOP held 3 s: ERROR -> MAINTENANCE ->
+READY, which also closes the open errors). So a request cannot be resolved
+while its station is still in ERROR - the member would be told "fixed" while
+the station is down. MAINTENANCE is accepted (taken out of service, e.g.
+waiting for a part).
 """
 
 from datetime import UTC, datetime, timedelta
@@ -28,6 +35,9 @@ error_logs = get_collection("error_logs")
 users = get_collection("users")
 
 OPEN_STATUSES = ("OPEN", "IN_PROGRESS")
+STATION_STILL_IN_ERROR = (
+    "Station is still in ERROR; put it in maintenance or back to READY at the station first"
+)
 # A session this recent at the same station is linked to the ticket.
 RELATED_SESSION_WINDOW = timedelta(hours=6)
 
@@ -264,6 +274,9 @@ async def resolve_ticket(technician: dict, ticket_id: str, note: str) -> dict:
     ticket = await _get(ticket_id)
     if ticket["status"] != "IN_PROGRESS" or ticket.get("assigned_to") != technician["user_id"]:
         raise BusinessRuleError("Accept the request before resolving it")
+    station = await get_station(ticket["station_id"])
+    if station and station.get("status") == "ERROR":
+        raise BusinessRuleError(STATION_STILL_IN_ERROR)
 
     now = now_utc()
     updated = await tickets.find_one_and_update(

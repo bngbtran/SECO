@@ -14,6 +14,9 @@ class StationResponse(BaseModel):
     last_heartbeat_at: datetime | None = None
     latitude: float | None = None
     longitude: float | None = None
+    address: str | None = None
+    # Tariff in force (the same for every station); a session keeps its own snapshot.
+    price_per_kwh_vnd: int | None = None
 
 
 class FavoriteStationResponse(StationResponse):

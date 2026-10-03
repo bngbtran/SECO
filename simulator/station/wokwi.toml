@@ -7,6 +7,9 @@ elf = "build/sketch.ino.elf"
 
 # Custom chips (chips/*.chip.c, rebuilt with chips/build.sh): the INA219 and
 # the 9V battery do not exist in the Wokwi part library.
+# Chip paths are relative to the repo root, not to this file: the Wokwi VS Code
+# extension (2.0.x) resolves chip binaries against the first workspace folder,
+# so open the SECO repo root in VS Code.
 [[chip]]
 name = "ina219"
 binary = "chips/ina219.chip.wasm"
