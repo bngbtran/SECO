@@ -12,6 +12,7 @@ from app.modules.member.service import (
     session_live_fields,
     stop_member_session,
 )
+from app.modules.notifications import events
 from app.websocket.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ async def announce_stopped(result: dict, *, send_stop: bool = True) -> None:
         )
 
     await broadcast_session(session, "STOPPED", transaction=result.get("transaction"))
+    await events.charging_completed(session, result.get("transaction"))
 
 
 async def tick_active_sessions() -> None:

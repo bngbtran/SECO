@@ -46,5 +46,19 @@ class ConnectionManager:
         for websocket in dead:
             self.disconnect(websocket)
 
+    async def send_to_user(self, user_id: str, data: dict) -> None:
+        """Only the user's own connections; monitor roles do not see it (inbox items)."""
+        dead: list[WebSocket] = []
+        for websocket, identity in list(self._identities.items()):
+            if identity["user_id"] != user_id:
+                continue
+            try:
+                await websocket.send_json(data)
+            except (RuntimeError, WebSocketDisconnect):
+                dead.append(websocket)
+
+        for websocket in dead:
+            self.disconnect(websocket)
+
 
 manager = ConnectionManager()

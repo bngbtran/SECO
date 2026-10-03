@@ -28,8 +28,10 @@ from app.modules.admin.schemas import (
 )
 from app.modules.admin.views import card_views, session_views, transaction_views
 from app.modules.auth.router import revoke_tokens
+from app.modules.cards.service import LOST
 from app.modules.charging.constants import SessionStatus
 from app.modules.logs.service import record_audit
+from app.modules.notifications import events
 
 router = APIRouter(tags=["Admin · Users & RFID"])
 
@@ -349,6 +351,7 @@ async def update_card(card_id: str, data: AdminCardUpdate, actor: dict) -> dict:
     changes = data.model_dump(exclude_unset=True)
     update: dict = {}
 
+    lost = card.get("block_reason") == LOST
     if "label" in changes:
         update["label"] = changes["label"]
     if changes.get("uid"):
@@ -361,7 +364,12 @@ async def update_card(card_id: str, data: AdminCardUpdate, actor: dict) -> dict:
             raise BusinessRuleError("Link the card to a user before activating it")
         if changes["is_active"] and card.get("pending") and "uid" not in update:
             raise BusinessRuleError("Card has no UID yet")
+        if changes["is_active"] and lost and "uid" not in update:
+            raise BusinessRuleError("Card was reported lost; give the member a new card instead")
         update["is_active"] = changes["is_active"]
+    if update.get("is_active") and card.get("block_reason"):
+        # Re-activating clears the owner's lock (or the lost flag, with a new UID).
+        update.update({"block_reason": None, "blocked_at": None, "blocked_by": None})
 
     if not update:
         return (await card_views([card]))[0]
@@ -379,12 +387,28 @@ async def update_card(card_id: str, data: AdminCardUpdate, actor: dict) -> dict:
         target_id=card_id,
         metadata=changes,
     )
-    return (await card_views([await _get_card(card_id)]))[0]
+    updated = await _get_card(card_id)
+    await _notify_card_owner(card, updated)
+    return (await card_views([updated]))[0]
+
+
+async def _notify_card_owner(before: dict, after: dict) -> None:
+    if not after.get("user_id") or before.get("is_active") == after.get("is_active"):
+        return
+    owner = await users.find_one({"user_id": after["user_id"]}, {"_id": 0, "user_id": 1, "role": 1})
+    if not owner:
+        return
+    if after.get("is_active"):
+        await events.card_unlocked(owner, after)
+    else:
+        await events.card_blocked(owner, after, reason="DISABLED", by_admin=True)
 
 
 async def link_card(card_id: str, user_id: str, actor: dict) -> dict:
     card = await _get_card(card_id)
     owner = await _card_owner(user_id)
+    if card.get("block_reason") == LOST:
+        raise BusinessRuleError("Card was reported lost and cannot be linked again")
 
     updated = await rfid_cards.find_one_and_update(
         {"card_id": card_id},
@@ -392,6 +416,10 @@ async def link_card(card_id: str, user_id: str, actor: dict) -> dict:
             "$set": {
                 "user_id": user_id,
                 "is_active": not card.get("pending", False),
+                # A new owner starts without the previous owner's lock.
+                "block_reason": None,
+                "blocked_at": None,
+                "blocked_by": None,
                 "updated_at": now_utc(),
             }
         },

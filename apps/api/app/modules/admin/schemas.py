@@ -75,6 +75,9 @@ class AdminCard(BaseModel):
     pending: bool
     # ACTIVE | INACTIVE | PENDING (waiting for a UID scan) | UNASSIGNED (no owner)
     status: str
+    # Why an INACTIVE card is blocked: LOCKED by its owner or reported LOST.
+    block_reason: str | None = None
+    blocked_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

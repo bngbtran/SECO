@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     # The QR encodes <base>/<payment_id>; the web app serves the sandbox payment page there.
     guest_payment_url_base: str = "http://localhost:5173/pay"
 
+    # Forgot password: a temporary password stands in for the old one.
+    password_reset_ttl_minutes: int = 10
+    password_reset_max_attempts: int = 5
+
+    # Member notification after a session when the balance drops below this.
+    low_balance_threshold_vnd: int = 20_000
+
     model_config = SettingsConfigDict(
         env_file=API_ROOT / ".env",
         case_sensitive=False,

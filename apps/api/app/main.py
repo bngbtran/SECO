@@ -14,7 +14,9 @@ from app.modules.auth.router import router as auth_router
 from app.modules.charging.ticker import run_session_ticker
 from app.modules.guest.router import router as guest_router
 from app.modules.member.router import router as member_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.station.router import router as station_router
+from app.modules.technician.router import router as technician_router
 from app.mqtt.client import mqtt_service
 from app.mqtt.watchdog import run_station_watchdog
 from app.websocket.manager import manager
@@ -70,6 +72,8 @@ app.include_router(station_router)
 app.include_router(member_router)
 app.include_router(guest_router)
 app.include_router(admin_router)
+app.include_router(technician_router)
+app.include_router(notifications_router)
 
 # HEAD too: uptime monitors (UptimeRobot) ping with HEAD to keep the free Render instance awake.
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["Health"])

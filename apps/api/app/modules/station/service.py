@@ -61,6 +61,11 @@ async def list_stations() -> list[dict]:
     return await _with_availability(await cursor.to_list(length=500))
 
 
+async def list_stations_by_ids(station_ids: list[str]) -> list[dict]:
+    cursor = stations.find({"station_id": {"$in": station_ids}}, {"_id": 0})
+    return await _with_availability(await cursor.to_list(length=len(station_ids)))
+
+
 async def get_station(station_id: str) -> dict | None:
     station = await stations.find_one({"station_id": station_id}, {"_id": 0})
     if not station:

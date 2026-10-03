@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.db.mongodb import get_collection
+from app.modules.notifications import events
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ async def record_error(
         return None
 
     document.pop("_id", None)
+    await events.station_error(document)
     return document
 
 

@@ -12,6 +12,9 @@ from app.core.exceptions import (
 from app.core.mongo_types import from_decimal128
 from app.db.mongodb import get_collection
 from app.modules.billing.settlement import get_transaction_for_session
+from app.modules.cards import service as cards
+from app.modules.cards.schemas import MyCardResponse
+from app.modules.member.favorites import add_favorite, list_favorites, remove_favorite
 from app.modules.member.realtime import announce_stopped, broadcast_session
 from app.modules.member.schemas import (
     MemberBudgetRequest,
@@ -41,8 +44,16 @@ from app.modules.member.service import (
     stop_member_charging,
     verify_member_rfid,
 )
+from app.modules.notifications import events
 from app.modules.payment.topup_schemas import DemoTopupRequest, DemoTopupResponse
 from app.modules.payment.topup_service import demo_topup
+from app.modules.station.schemas import FavoriteStationResponse
+from app.modules.support import service as support
+from app.modules.support.schemas import (
+    MemberSupportTicket,
+    MemberSupportTicketPage,
+    SupportTicketCreate,
+)
 
 router = APIRouter(
     prefix="/api/v1/member",
@@ -273,10 +284,12 @@ async def topup(
     current_user: CurrentMember,
 ):
     with _http_errors():
-        return await demo_topup(
+        transaction = await demo_topup(
             user_id=current_user["user_id"],
             amount_vnd=payload.amount_vnd,
         )
+    await events.topup_succeeded(current_user["user_id"], transaction)
+    return transaction
 
 
 @router.get(
@@ -324,3 +337,132 @@ async def get_session_history(
         limit=limit,
         offset=offset,
     )
+
+
+# ---------------------------------------------------------------------------
+# Favourite stations
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/favorite-stations",
+    response_model=list[FavoriteStationResponse],
+)
+async def get_favorite_stations(current_user: CurrentMember):
+    return await list_favorites(user_id=current_user["user_id"])
+
+
+@router.put(
+    "/favorite-stations/{station_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def put_favorite_station(station_id: str, current_user: CurrentMember):
+    with _http_errors():
+        await add_favorite(user_id=current_user["user_id"], station_id=station_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/favorite-stations/{station_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_favorite_station(station_id: str, current_user: CurrentMember):
+    await remove_favorite(user_id=current_user["user_id"], station_id=station_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# My RFID cards: lock / unlock / report lost
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/rfid-cards",
+    response_model=list[MyCardResponse],
+)
+async def get_my_cards(current_user: CurrentMember):
+    return await cards.list_my_cards(user_id=current_user["user_id"])
+
+
+@router.post(
+    "/rfid-cards/{card_id}/lock",
+    response_model=MyCardResponse,
+)
+async def lock_my_card(card_id: str, current_user: CurrentMember):
+    """Temporary lock; unlock it from the app."""
+    with _http_errors():
+        return await cards.lock_card(current_user, card_id)
+
+
+@router.post(
+    "/rfid-cards/{card_id}/unlock",
+    response_model=MyCardResponse,
+)
+async def unlock_my_card(card_id: str, current_user: CurrentMember):
+    with _http_errors():
+        return await cards.unlock_card(current_user, card_id)
+
+
+@router.post(
+    "/rfid-cards/{card_id}/report-lost",
+    response_model=MyCardResponse,
+)
+async def report_my_card_lost(card_id: str, current_user: CurrentMember):
+    """Permanent: the card is disabled for good and the desk issues a new one."""
+    with _http_errors():
+        return await cards.report_lost(current_user, card_id)
+
+
+# ---------------------------------------------------------------------------
+# Support requests
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/support-tickets",
+    response_model=MemberSupportTicket,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_support_ticket(request: SupportTicketCreate, current_user: CurrentMember):
+    """Ask for help at a station; technicians are notified with the station's state."""
+    with _http_errors():
+        return await support.create_ticket(
+            current_user,
+            station_id=request.station_id,
+            category=request.category,
+            description=request.description,
+        )
+
+
+@router.get(
+    "/support-tickets",
+    response_model=MemberSupportTicketPage,
+)
+async def get_support_tickets(
+    current_user: CurrentMember,
+    limit: int = Limit,
+    offset: int = Offset,
+):
+    return await support.list_tickets(
+        query={"user_id": current_user["user_id"]},
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/support-tickets/{ticket_id}",
+    response_model=MemberSupportTicket,
+)
+async def get_support_ticket(ticket_id: str, current_user: CurrentMember):
+    with _http_errors():
+        return await support.get_member_ticket(current_user, ticket_id)
+
+
+@router.post(
+    "/support-tickets/{ticket_id}/cancel",
+    response_model=MemberSupportTicket,
+)
+async def cancel_support_ticket(ticket_id: str, current_user: CurrentMember):
+    with _http_errors():
+        return await support.cancel_ticket(current_user, ticket_id)
