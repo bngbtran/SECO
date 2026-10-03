@@ -125,3 +125,40 @@ Script tự cài core ESP32 và các thư viện nếu thiếu, tìm cổng USB,
 Nếu không thấy cổng: dùng cáp USB có truyền dữ liệu, không phải cáp chỉ để sạc. Kiểm tra bằng `ls /dev/cu.usb*`. Nếu board không tự vào chế độ nạp, giữ nút **BOOT** khi bắt đầu upload.
 
 **Windows:** chạy `./flash.sh` trong **Git Bash** (terminal của VS Code chọn Git Bash). Script tự tìm cổng `COMx` của ESP32 (bỏ qua cổng Bluetooth). Kiểm tra cổng bằng `python -m serial.tools.list_ports -v`. Không thấy cổng thì cài driver USB-UART của board: **CP210x** (Silicon Labs) hoặc **CH340** (WCH). Chọn cổng thủ công: `PORT=COM3 ./flash.sh`.
+
+## Không có màn hình: `no_lcd/`
+
+Dùng để test chức năng **gán thẻ** khi chỉ có ESP32 + MFRC522. Bản này cùng giao thức MQTT với bản có màn hình, nên web và API không cần sửa gì.
+
+- `no_lcd/no_lcd.ino`: firmware không dùng OLED (không cần thư viện Adafruit).
+- `no_lcd/no_lcd.json`: sơ đồ Wokwi gồm ESP32-S3 + MFRC522, đi dây giống board thật (mục 2).
+
+Nối dây MFRC522 như bảng ở mục 2, bỏ qua phần OLED.
+
+**Phản hồi thay cho màn hình:**
+
+| Trạng thái | Serial Monitor | LED ESP32-S3 (RGB) | LED ESP32 DevKit (GPIO 2) |
+|---|---|---|---|
+| Chưa kết nối MQTT | `MQTT connect failed ...` | vàng nhấp nháy | nháy chậm |
+| Sẵn sàng | `[READY] ...` | tắt | chớp ngắn mỗi 3 giây |
+| Web bấm "Gán thẻ" | `[WAITING] assign card to <tên> ...` | xanh dương nhấp nháy | nháy nhanh |
+| Đọc thẻ thành công | `[CARD READ] <UID> ...` | xanh lá | 1 lần sáng dài |
+| Web bấm "Hoàn tất" | `[ASSIGNED] card <UID> now belongs to <tên>` | xanh lá | 1 lần sáng dài |
+| Thẻ đã có chủ / chưa có yêu cầu / hết giờ | `[REFUSED]` / `[NO REQUEST]` / `[TIMEOUT]` | đỏ | 3 lần chớp |
+
+Gõ `?` + Enter trong Serial Monitor để in trạng thái (WiFi, MQTT, MFRC522, yêu cầu gán thẻ đang mở). Gõ UID hex + Enter để giả lập quẹt thẻ.
+
+**Phần cứng thật:** `flash.sh` tự chép `config.h` vào `no_lcd/` rồi nạp:
+
+```bash
+conda activate iad
+cd hardware/admin_reader
+SKETCH=no_lcd ./flash.sh              # ESP32-S3
+SKETCH=no_lcd BOARD=esp32 ./flash.sh  # ESP32 DevKit
+```
+
+Với Arduino IDE: copy `config.h` vào `no_lcd/`, rồi mở `no_lcd/no_lcd.ino`.
+
+**Wokwi (wokwi.com):** tạo project ESP32-S3, dán `no_lcd.ino` vào `sketch.ino` và `no_lcd.json` vào `diagram.json`, thêm thư viện `PubSubClient`, `ArduinoJson`, `MFRC522` vào `libraries.txt`. Không có `config.h` thì firmware tự dùng WiFi `Wokwi-GUEST` và broker `broker.hivemq.com:8883`, tức là nói chuyện thẳng với API trên Render. Bấm vào MFRC522 trong simulator để chọn thẻ và **Tap**.
+
+Chỉ bật **một** đầu đọc `READER-01` cùng lúc (bản có màn hình, bản `no_lcd` hoặc Wokwi `simulator/admin`).

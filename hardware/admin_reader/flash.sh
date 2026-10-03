@@ -3,6 +3,7 @@
 # Usage:  ./flash.sh              ESP32-S3 DevKitC (default)
 #         BOARD=esp32 ./flash.sh  ESP32 DevKit (WROOM)
 #         PORT=COM3 ./flash.sh    pick the port yourself (macOS: /dev/cu.usbserial-0001)
+#         SKETCH=no_lcd ./flash.sh   the reader without a screen (no_lcd/no_lcd.ino)
 # Windows: run from Git Bash.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -16,6 +17,12 @@ fi
 if [ ! -f config.h ]; then
   echo "config.h missing: cp config.example.h config.h, then set WiFi + MQTT_HOST."; exit 1
 fi
+case "${SKETCH:-admin_reader}" in
+  admin_reader) SKETCH_DIR=. ;;
+  # Same config.h as the reader with a screen (OLED settings are ignored).
+  no_lcd) SKETCH_DIR=no_lcd; cp config.h no_lcd/config.h ;;
+  *) echo "SKETCH must be admin_reader or no_lcd"; exit 1 ;;
+esac
 if grep -q '"your-wifi"' config.h; then
   echo "config.h still has the example WiFi: edit WIFI_SSID / WIFI_PASSWORD / MQTT_HOST first."; exit 1
 fi
@@ -55,9 +62,9 @@ case "${BOARD:-esp32s3}" in
 esac
 echo "Board $FQBN on $PORT"
 
-arduino-cli compile --fqbn "$FQBN" --output-dir build .
-arduino-cli upload --fqbn "$FQBN" --port "$PORT" --input-dir build .
+arduino-cli compile --fqbn "$FQBN" --output-dir "build/${SKETCH:-admin_reader}" "$SKETCH_DIR"
+arduino-cli upload --fqbn "$FQBN" --port "$PORT" --input-dir "build/${SKETCH:-admin_reader}" "$SKETCH_DIR"
 
-echo "Serial monitor (Ctrl+C to quit). Type a hex UID + Enter to fake a card tap."
+echo "Serial monitor (Ctrl+C to quit). Type a hex UID + Enter to fake a card tap (no_lcd: \"?\" + Enter = status)."
 # DTR/RTS off: on the UART port they drive EN / IO0 and would hold the chip in reset.
 arduino-cli monitor --port "$PORT" --config baudrate=115200,dtr=off,rts=off
