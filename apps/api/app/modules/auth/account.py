@@ -94,7 +94,8 @@ async def change_password(user: dict, current_password: str, new_password: str) 
 # No look-alike characters (0/O, 1/l/I): the user types it from the screen.
 _TEMP_ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 TEMP_PASSWORD_LENGTH = 10
-# Only accounts that use the mobile app; an admin is reset by another admin.
+# Who may ask for a temporary password themselves (mobile app). An admin gets
+# one from another admin, or from scripts.issue_temp_password on the server.
 SELF_RESET_ROLES = {"USER", "TECHNICIAN"}
 
 
@@ -118,30 +119,60 @@ async def request_password_reset(email: str) -> dict:
     if user["role"] not in SELF_RESET_ROLES:
         raise BusinessRuleError("Admin passwords are reset by another admin")
 
+    issued = await _issue_temporary_password(user["user_id"], settings.password_reset_ttl_minutes)
+    await record_audit(
+        actor=user,
+        action="PASSWORD_RESET_REQUEST",
+        target_type="user",
+        target_id=user["user_id"],
+    )
+    return issued
+
+
+async def issue_temporary_password_by_admin(admin: dict | None, user_id: str) -> dict:
+    """An admin hands a temporary password to someone (any role), e.g. an admin who forgot theirs.
+
+    admin=None is the server-side script (scripts.issue_temp_password).
+    """
+    user = await _get_user(user_id)
+    if not user.get("is_active"):
+        raise BusinessRuleError("Account is locked; unlock it first")
+    if admin and admin["user_id"] == user_id:
+        raise BusinessRuleError("Use change password for your own account")
+
+    issued = await _issue_temporary_password(user_id, settings.admin_temp_password_ttl_minutes)
+    if admin:
+        await record_audit(
+            actor=admin,
+            action="PASSWORD_TEMP_ISSUE",
+            target_type="user",
+            target_id=user_id,
+            metadata={"user_name": user["name"], "role": user["role"]},
+        )
+    await events.temporary_password_issued(user)
+    return issued
+
+
+async def _issue_temporary_password(user_id: str, ttl_minutes: int) -> dict:
+    """The account password is not touched yet; asking again replaces the previous one."""
     now = now_utc()
     await password_resets.update_many(
-        {"user_id": user["user_id"], "used_at": None, "expires_at": {"$gt": now}},
+        {"user_id": user_id, "used_at": None, "expires_at": {"$gt": now}},
         {"$set": {"expires_at": now}},
     )
 
     temporary_password = _temporary_password()
-    expires_at = now + timedelta(minutes=settings.password_reset_ttl_minutes)
+    expires_at = now + timedelta(minutes=ttl_minutes)
     await password_resets.insert_one(
         {
             "reset_id": str(uuid4()),
-            "user_id": user["user_id"],
+            "user_id": user_id,
             "temp_password_hash": hash_password(temporary_password),
             "attempts": 0,
             "expires_at": expires_at,
             "used_at": None,
             "created_at": now,
         }
-    )
-    await record_audit(
-        actor=user,
-        action="PASSWORD_RESET_REQUEST",
-        target_type="user",
-        target_id=user["user_id"],
     )
     return {"temporary_password": temporary_password, "expires_at": expires_at}
 
@@ -152,7 +183,8 @@ async def reset_password(email: str, temporary_password: str, new_password: str)
         {"email": email.strip().lower(), "is_active": True},
         _USER_PROJECTION,
     )
-    if not user or user["role"] not in SELF_RESET_ROLES:
+    # Any role: an admin only gets a temporary password from another admin.
+    if not user:
         raise BusinessRuleError(INVALID_TEMP_PASSWORD)
 
     reset = await password_resets.find_one(

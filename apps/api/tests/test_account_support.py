@@ -765,3 +765,127 @@ def test_support_ticket_flow():
             await f.cleanup()
 
     run(scenario)
+
+
+# --- Admin: temporary passwords and card blocking -----------------------------------
+
+
+async def admin_login(http: httpx.AsyncClient, user: dict) -> dict:
+    response = await http.post("/api/v1/admin/auth/login", json={"email": user["email"], "password": PASSWORD})
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def test_admin_issues_temporary_password_to_another_admin():
+    async def scenario():
+        f = Fixture()
+        try:
+            admin = await f.user("ADMIN")
+            forgetful = await f.user("ADMIN")
+            locked = await f.user("TECHNICIAN", is_active=False)
+            member = await f.user()
+            async with api() as http:
+                auth = await admin_login(http, admin)
+
+                # An admin cannot get one by "forgot password".
+                response = await http.post("/api/v1/auth/forgot-password", json={"email": forgetful["email"]})
+                assert response.status_code == 403
+
+                response = await http.post(f"/api/v1/admin/users/{admin['user_id']}/temporary-password", headers=auth)
+                assert response.status_code == 400  # own account: change password instead
+                response = await http.post(f"/api/v1/admin/users/{locked['user_id']}/temporary-password", headers=auth)
+                assert response.status_code == 400
+                response = await http.post("/api/v1/admin/users/nope/temporary-password", headers=auth)
+                assert response.status_code == 404
+                member_auth = await login(http, member)
+                response = await http.post(
+                    f"/api/v1/admin/users/{forgetful['user_id']}/temporary-password", headers=member_auth
+                )
+                assert response.status_code == 403
+
+                response = await http.post(
+                    f"/api/v1/admin/users/{forgetful['user_id']}/temporary-password", headers=auth
+                )
+                assert response.status_code == 200, response.text
+                temporary = response.json()["temporary_password"]
+
+                # The forgetful admin sets a new password with it and is signed in.
+                response = await http.post(
+                    "/api/v1/auth/reset-password",
+                    json={"email": forgetful["email"], "temporary_password": temporary, "new_password": "fresh-admin"},
+                )
+                assert response.status_code == 200, response.text
+                assert response.json()["user"]["role"] == "ADMIN"
+                token = {"Authorization": f"Bearer {response.json()['access_token']}"}
+                assert (await http.get("/api/v1/admin/auth/me", headers=token)).status_code == 200
+
+            assert [n["type"] for n in await inbox(forgetful["user_id"])] == [
+                "TEMP_PASSWORD_ISSUED",
+                "PASSWORD_CHANGED",
+            ]
+            audit = await audit_logs.find_one({"actor_user_id": admin["user_id"], "action": "PASSWORD_TEMP_ISSUE"})
+            assert audit["target_id"] == forgetful["user_id"]
+        finally:
+            await f.cleanup()
+
+    run(scenario)
+
+
+def test_admin_locks_or_marks_card_lost_without_touching_the_account():
+    async def scenario():
+        f = Fixture()
+        try:
+            admin = await f.user("ADMIN")
+            member = await f.user()
+            lost_card = await f.card(member)
+            spare_card = await f.card(member)
+            async with api() as http:
+                auth = await admin_login(http, admin)
+                member_auth = await login(http, member)
+
+                response = await http.post(
+                    f"/api/v1/admin/rfid-cards/{lost_card['card_id']}/block", headers=auth, json={"reason": "LOST"}
+                )
+                assert response.status_code == 200, response.text
+                assert response.json()["status"] == "INACTIVE"
+                assert response.json()["block_reason"] == "LOST"
+
+                # The account and the other card keep working.
+                assert (await http.get("/api/v1/auth/me", headers=member_auth)).json()["is_active"] is True
+                await verify_member_rfid(uid=spare_card["uid"])
+                with pytest.raises(ResourceNotFoundError):
+                    await verify_member_rfid(uid=lost_card["uid"])
+
+                response = await http.patch(
+                    f"/api/v1/admin/rfid-cards/{lost_card['card_id']}", headers=auth, json={"is_active": True}
+                )
+                assert response.status_code == 400
+
+                # LOCKED by the desk: the member cannot unlock it, the desk can.
+                response = await http.post(
+                    f"/api/v1/admin/rfid-cards/{spare_card['card_id']}/block", headers=auth, json={"reason": "LOCKED"}
+                )
+                assert response.json()["block_reason"] == "LOCKED"
+                response = await http.post(
+                    f"/api/v1/member/rfid-cards/{spare_card['card_id']}/unlock", headers=member_auth
+                )
+                assert response.status_code == 400
+                response = await http.patch(
+                    f"/api/v1/admin/rfid-cards/{spare_card['card_id']}", headers=auth, json={"is_active": True}
+                )
+                assert response.json()["status"] == "ACTIVE"
+                assert response.json()["block_reason"] is None
+
+                response = await http.post(
+                    f"/api/v1/admin/rfid-cards/{spare_card['card_id']}/block", headers=auth, json={"reason": "BROKEN"}
+                )
+                assert response.status_code == 422
+
+            items = await inbox(member["user_id"])
+            assert [n["type"] for n in items] == ["CARD_BLOCKED", "CARD_BLOCKED", "CARD_UNLOCKED"]
+            assert "báo mất" in items[0]["body"]
+            assert items[1]["body"].startswith("Quản trị viên đã khóa")
+        finally:
+            await f.cleanup()
+
+    run(scenario)

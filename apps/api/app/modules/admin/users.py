@@ -16,6 +16,7 @@ from app.db.mongodb import get_collection
 from app.modules.admin.common import Limit, Offset, http_errors, page
 from app.modules.admin.schemas import (
     AdminCard,
+    AdminCardBlock,
     AdminCardCreate,
     AdminCardLink,
     AdminCardUpdate,
@@ -25,9 +26,12 @@ from app.modules.admin.schemas import (
     AdminUserUpdate,
     Page,
     Role,
+    TemporaryPassword,
 )
 from app.modules.admin.views import card_views, session_views, transaction_views
+from app.modules.auth import account
 from app.modules.auth.router import revoke_tokens
+from app.modules.cards import service as cards
 from app.modules.cards.service import LOST
 from app.modules.charging.constants import SessionStatus
 from app.modules.logs.service import record_audit
@@ -560,3 +564,21 @@ async def remove_card(card_id: str, admin: CurrentAdmin):
     with http_errors():
         await delete_card(card_id, admin)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/rfid-cards/{card_id}/block", response_model=AdminCard)
+async def block_card(card_id: str, data: AdminCardBlock, admin: CurrentAdmin):
+    """Lock the card (LOCKED) or mark it lost (LOST) for its owner. Only the card is
+    affected: the account stays active. Unlock a LOCKED card with PATCH is_active=true;
+    a LOST card is replaced with a new one (card registration REPLACE)."""
+    with http_errors():
+        card = await cards.admin_block_card(admin, card_id, data.reason)
+    return (await card_views([card]))[0]
+
+
+@router.post("/users/{user_id}/temporary-password", response_model=TemporaryPassword)
+async def post_temporary_password(user_id: str, admin: CurrentAdmin):
+    """Give the person a temporary password (e.g. an admin who forgot theirs). They use it
+    as the current password in /auth/reset-password; their password works until then."""
+    with http_errors():
+        return await account.issue_temporary_password_by_admin(admin, user_id)

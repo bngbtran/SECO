@@ -18,6 +18,7 @@ from app.modules.logs.service import record_audit
 from app.modules.notifications import events
 
 rfid_cards = get_collection("rfid_cards")
+users = get_collection("users")
 
 LOCKED = "LOCKED"
 LOST = "LOST"
@@ -64,7 +65,8 @@ async def _my_card(user: dict, card_id: str) -> dict:
     return card
 
 
-async def _block(user: dict, card: dict, reason: str) -> dict:
+async def _block(actor: dict, card: dict, reason: str, *, owner: dict | None = None) -> dict:
+    """actor locks the card; owner (when an admin acts for them) gets the notification."""
     updated = await rfid_cards.find_one_and_update(
         {"card_id": card["card_id"]},
         {
@@ -72,7 +74,7 @@ async def _block(user: dict, card: dict, reason: str) -> dict:
                 "is_active": False,
                 "block_reason": reason,
                 "blocked_at": now_utc(),
-                "blocked_by": user["user_id"],
+                "blocked_by": actor["user_id"],
                 "updated_at": now_utc(),
             }
         },
@@ -80,14 +82,35 @@ async def _block(user: dict, card: dict, reason: str) -> dict:
         return_document=ReturnDocument.AFTER,
     )
     await record_audit(
-        actor=user,
+        actor=actor,
         action="CARD_REPORT_LOST" if reason == LOST else "CARD_LOCK",
         target_type="rfid_card",
         target_id=card["card_id"],
-        metadata={"uid": card.get("uid")},
+        metadata={"uid": card.get("uid"), "user_id": card.get("user_id")},
     )
-    await events.card_blocked(user, updated, reason=reason, by_admin=False)
+    await events.card_blocked(owner or actor, updated, reason=reason, by_admin=owner is not None)
     return updated
+
+
+async def admin_block_card(admin: dict, card_id: str, reason: str) -> dict:
+    """The desk locks a card or marks it lost for its owner (e.g. the member phoned in).
+
+    Only the card changes: the account and its other cards keep working. The
+    owner cannot unlock a card the desk locked.
+    """
+    card = await rfid_cards.find_one({"card_id": card_id}, {"_id": 0})
+    if not card:
+        raise ResourceNotFoundError("RFID card not found")
+    if not card.get("user_id"):
+        raise BusinessRuleError("Card is not linked to any user")
+    if card.get("pending"):
+        raise BusinessRuleError("Card has not been scanned yet")
+
+    state = card_state(card)
+    if state == LOST or (state == reason == LOCKED and card.get("blocked_by") == admin["user_id"]):
+        return card
+    owner = await users.find_one({"user_id": card["user_id"]}, {"_id": 0, "user_id": 1, "role": 1})
+    return await _block(admin, card, reason, owner=owner or {"user_id": card["user_id"], "role": "USER"})
 
 
 async def lock_card(user: dict, card_id: str) -> dict:

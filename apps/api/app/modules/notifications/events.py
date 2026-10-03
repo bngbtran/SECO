@@ -13,6 +13,7 @@ Technician (mobile app)
     STATION_ERROR            a station logged an error (E-Stop, overheat, lost link...)
 Every role
     PASSWORD_CHANGED      security notice after a password change or reset
+    TEMP_PASSWORD_ISSUED  an admin issued a temporary password for the account
 """
 
 import functools
@@ -235,5 +236,18 @@ async def password_changed(user: dict, *, via_reset: bool) -> None:
         body=(
             f"Mật khẩu tài khoản của bạn {how}. Các thiết bị khác đã được đăng xuất. "
             "Nếu không phải bạn, hãy liên hệ quản trị viên ngay."
+        ),
+    )
+
+
+@best_effort
+async def temporary_password_issued(user: dict) -> None:
+    await notify_user(
+        user,
+        type="TEMP_PASSWORD_ISSUED",
+        title="Mật khẩu tạm đã được cấp",
+        body=(
+            "Quản trị viên vừa cấp mật khẩu tạm cho tài khoản của bạn. Mật khẩu hiện tại vẫn dùng được "
+            "cho tới khi bạn đặt mật khẩu mới. Nếu bạn không yêu cầu, hãy liên hệ quản trị viên."
         ),
     )
