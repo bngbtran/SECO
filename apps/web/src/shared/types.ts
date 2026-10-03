@@ -20,6 +20,17 @@ export interface Me {
   role: Role;
   balance_vnd: number;
   is_active: boolean;
+  phone?: string | null;
+}
+
+export interface LoginResult {
+  access_token: string;
+  user: Me;
+}
+
+export interface TemporaryPassword {
+  temporary_password: string;
+  expires_at: string;
 }
 
 export interface AdminUser {
@@ -44,6 +55,9 @@ export interface AdminCard {
   is_active: boolean;
   pending: boolean;
   status: "ACTIVE" | "INACTIVE" | "PENDING" | "UNASSIGNED";
+  /** Why an INACTIVE card is blocked: LOCKED (desk / owner lock) or LOST (final). */
+  block_reason?: "LOCKED" | "LOST" | null;
+  blocked_at?: string | null;
   created_at: string;
   updated_at: string;
 }

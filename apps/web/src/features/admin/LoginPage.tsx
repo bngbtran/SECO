@@ -1,6 +1,6 @@
 import { Zap } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../shared/auth";
 
@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -108,6 +109,21 @@ export default function LoginPage() {
               required
             />
           </div>
+          <div style={{ textAlign: "right", margin: "-6px 0 12px" }}>
+            <button type="button" className="link" style={{ fontSize: 12.5 }} onClick={() => setForgot(!forgot)}>
+              Quên mật khẩu?
+            </button>
+          </div>
+          {forgot && (
+            <div className="hint" style={{ margin: "0 0 14px", padding: 12, border: "1px solid var(--border)", borderRadius: 10 }}>
+              Liên hệ một quản trị viên khác để được cấp <b>mật khẩu tạm</b> (Người dùng → chi tiết tài khoản → Cấp mật
+              khẩu tạm), rồi{" "}
+              <Link className="link" to="/reset-password">
+                đặt lại mật khẩu
+              </Link>
+              .
+            </div>
+          )}
           {error && (
             <div className="err" style={{ marginBottom: 12 }}>
               {error}

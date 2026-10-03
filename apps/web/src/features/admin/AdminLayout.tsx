@@ -4,6 +4,7 @@ import {
   Bell,
   ChevronRight,
   Home,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Receipt,
@@ -12,6 +13,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../shared/auth";
@@ -19,6 +21,7 @@ import { initials } from "../../shared/format";
 import { useApi } from "../../shared/hooks";
 import { useRealtime, useRealtimeRefresh } from "../../shared/realtime";
 import type { AdminErrorLog, Page } from "../../shared/types";
+import { ChangePasswordDialog } from "./PasswordDialogs";
 
 const NAV: [string, [string, LucideIcon, string][]][] = [
   ["Tổng quan", [["/", LayoutDashboard, "Dashboard"]]],
@@ -78,6 +81,7 @@ export default function AdminLayout() {
   const openErrors = useApi<Page<AdminErrorLog>>("/admin/errors", { resolved: false, limit: 1 });
   useRealtimeRefresh(openErrors.reload, (e) => e.type === "station_error" || e.type === "station_updated");
   const openCount = openErrors.data?.total ?? 0;
+  const [changingPassword, setChangingPassword] = useState(false);
 
   return (
     <div className="admin">
@@ -114,8 +118,12 @@ export default function AdminLayout() {
               </div>
             </div>
           </div>
+          <button className="btn btn-ghost btn-sm w-full logout" onClick={() => setChangingPassword(true)}>
+            <KeyRound size={15} />
+            Đổi mật khẩu
+          </button>
           <button
-            className="btn btn-ghost btn-sm w-full logout"
+            className="btn btn-ghost btn-sm w-full"
             onClick={async () => {
               await logout();
               navigate("/login");
@@ -144,6 +152,7 @@ export default function AdminLayout() {
           <Outlet />
         </div>
       </div>
+      {changingPassword && <ChangePasswordDialog onClose={() => setChangingPassword(false)} />}
     </div>
   );
 }

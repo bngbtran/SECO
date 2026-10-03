@@ -94,4 +94,11 @@ export const CARD_BADGE: Record<string, string> = {
   PENDING: "b-maint",
   INACTIVE: "b-gray",
   UNASSIGNED: "b-outline",
+  LOCKED: "b-maint",
+  LOST: "b-error",
+};
+
+export const CARD_BLOCK_LABEL: Record<string, string> = {
+  LOCKED: "Đã khoá",
+  LOST: "Báo mất",
 };
