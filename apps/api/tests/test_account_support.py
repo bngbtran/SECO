@@ -730,6 +730,17 @@ def test_support_ticket_flow():
                 mine = (await http.get("/api/v1/technician/support-tickets?scope=mine", headers=b_auth)).json()
                 assert mine["total"] == 0
 
+                # The station is still in ERROR: the member must not be told it is fixed.
+                response = await http.post(
+                    f"/api/v1/technician/support-tickets/{ticket_id}/resolve",
+                    headers=a_auth,
+                    json={"resolution_note": "Đã reset trạm, sạc lại bình thường"},
+                )
+                assert response.status_code == 400
+                assert "still in ERROR" in response.json()["detail"]
+                # Technician card + STOP 3 s at the station: back to READY.
+                await stations.update_one({"station_id": station_id}, {"$set": {"status": "READY"}})
+
                 response = await http.post(
                     f"/api/v1/technician/support-tickets/{ticket_id}/resolve",
                     headers=a_auth,
@@ -886,6 +897,73 @@ def test_admin_locks_or_marks_card_lost_without_touching_the_account():
             assert "báo mất" in items[0]["body"]
             assert items[1]["body"].startswith("Quản trị viên đã khóa")
         finally:
+            await f.cleanup()
+
+    run(scenario)
+
+
+# --- Technician: stations, errors, maintenance; public station price ------------
+
+
+def test_technician_station_views_and_public_price():
+    async def scenario():
+        f = Fixture()
+        try:
+            member = await f.user()
+            technician = await f.user("TECHNICIAN")
+            broken = await f.station(status="ERROR", address="Bãi xe Beta", latest_telemetry={"temperature_c": 41.0})
+            fine = await f.station()
+            error = await record_error(station_id=broken, error_type="OVER_TEMPERATURE", severity="CRITICAL")
+            now = datetime.now(UTC)
+            await get_collection("maintenance_records").insert_one(
+                {
+                    "maintenance_id": f"MT-{uuid4()}",
+                    "station_id": broken,
+                    "technician_id": technician["user_id"],
+                    "error_id": error["error_id"],
+                    "status": "COMPLETED",
+                    "started_at": now,
+                    "completed_at": now,
+                    "description": "test",
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+            async with api() as http:
+                auth = await login(http, technician)
+                member_auth = await login(http, member)
+
+                response = await http.post(
+                    "/api/v1/member/support-tickets",
+                    headers=member_auth,
+                    json={"station_id": broken, "category": "CANNOT_START"},
+                )
+                assert response.status_code == 201
+
+                # Public station API: address and the tariff in force.
+                station = (await http.get(f"/api/v1/stations/{broken}")).json()
+                assert station["address"] == "Bãi xe Beta"
+                assert station["price_per_kwh_vnd"] > 0
+
+                listing = (await http.get("/api/v1/technician/stations", headers=auth)).json()
+                ids = [s["station_id"] for s in listing]
+                assert ids.index(broken) < ids.index(fine)  # stations needing a visit first
+                row = next(s for s in listing if s["station_id"] == broken)
+                assert row["open_error_count"] == 1 and row["open_ticket_count"] == 1
+                assert row["temperature_c"] == 41.0
+
+                detail = (await http.get(f"/api/v1/technician/stations/{broken}", headers=auth)).json()
+                assert [e["error_id"] for e in detail["open_errors"]] == [error["error_id"]]
+                assert detail["open_tickets"][0]["user_name"] == member["name"]
+                assert detail["maintenance"][0]["technician_name"] == technician["name"]
+                assert (await http.get("/api/v1/technician/stations/NOPE", headers=auth)).status_code == 404
+
+                mine = (await http.get("/api/v1/technician/maintenance", headers=auth)).json()
+                assert mine["total"] == 1 and mine["items"][0]["station_id"] == broken
+
+                assert (await http.get("/api/v1/technician/stations", headers=member_auth)).status_code == 403
+        finally:
+            await get_collection("maintenance_records").delete_many({"station_id": {"$in": f.station_ids}})
             await f.cleanup()
 
     run(scenario)

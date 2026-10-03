@@ -1,14 +1,16 @@
 """Technician app: member support requests and the technician's own RFID cards."""
 
 from contextlib import contextmanager
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel
 
 from app.core.dependencies import CurrentTechnician
 from app.core.exceptions import BusinessRuleError, ConflictError, ResourceNotFoundError
 from app.modules.cards import service as cards
 from app.modules.cards.schemas import MyCardResponse
+from app.modules.station.schemas import StationResponse
 from app.modules.support import service as support
 from app.modules.support.schemas import (
     SupportTicketResolve,
@@ -16,8 +18,30 @@ from app.modules.support.schemas import (
     TechnicianSupportTicketPage,
     TicketStatus,
 )
+from app.modules.technician import stations as tech_stations
 
 router = APIRouter(prefix="/api/v1/technician", tags=["Technician"])
+
+
+class TechnicianStation(StationResponse):
+    open_error_count: int
+    open_ticket_count: int
+    temperature_c: float | None = None
+
+
+class TechnicianStationDetail(BaseModel):
+    station: StationResponse
+    latest_telemetry: dict[str, Any] | None
+    open_errors: list[dict[str, Any]]
+    open_tickets: list[TechnicianSupportTicket]
+    maintenance: list[dict[str, Any]]
+
+
+class MaintenancePage(BaseModel):
+    items: list[dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
 
 
 @contextmanager
@@ -96,3 +120,28 @@ async def unlock_my_card(card_id: str, technician: CurrentTechnician):
 async def report_my_card_lost(card_id: str, technician: CurrentTechnician):
     with _http_errors():
         return await cards.report_lost(technician, card_id)
+
+
+@router.get("/stations", response_model=list[TechnicianStation])
+async def get_stations(technician: CurrentTechnician):
+    """Stations needing a visit first (ERROR, MAINTENANCE, OFFLINE), with open errors / requests."""
+    return await tech_stations.list_stations_for_technician()
+
+
+@router.get("/stations/{station_id}", response_model=TechnicianStationDetail)
+async def get_station_detail(station_id: str, technician: CurrentTechnician):
+    """Live state, latest telemetry, open errors, member requests and recent maintenance."""
+    with _http_errors():
+        return await tech_stations.station_detail_for_technician(station_id)
+
+
+@router.get("/maintenance", response_model=MaintenancePage)
+async def get_my_maintenance(
+    technician: CurrentTechnician,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    """My maintenance history (entered / left maintenance at a station with my card)."""
+    return await tech_stations.list_my_maintenance(
+        technician_id=technician["user_id"], limit=limit, offset=offset
+    )
