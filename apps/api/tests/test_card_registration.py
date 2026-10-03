@@ -216,6 +216,37 @@ def test_unlinked_card_can_be_reused(reader):
     run(scenario)
 
 
+def test_linked_card_without_request_shows_owner_and_balance(reader):
+    async def scenario():
+        clean = Cleanup()
+        member = await seed_user("USER", 125_000)
+        clean.user_ids.add(member["user_id"])
+        uid = new_uid("I")
+        clean.card_ids.add(await add_card(uid, member["user_id"]))
+        loose = new_uid("L")
+        clean.card_ids.add(await add_card(loose, None))
+        try:
+            await tap(uid.lower())
+            res = reader["res"][-1]
+            assert res["ok"] is True
+            assert res["kind"] == "CARD_INFO"
+            assert res["uid"] == uid
+            assert res["user_name"] == member["name"]
+            assert res["balance_vnd"] == 125_000
+            assert res["card_active"] is True
+            assert res["user_active"] is True
+            # Nothing is opened or changed by a lookup.
+            assert await registrations.count_documents({"reader_id": READER}) == 0
+
+            # An unlinked card has no owner to show.
+            await tap(loose)
+            assert reader["res"][-1]["error"] == "NO_REQUEST"
+        finally:
+            await clean()
+
+    run(scenario)
+
+
 def test_scan_without_request_newest_request_wins_and_expiry(reader):
     async def scenario():
         clean = Cleanup()

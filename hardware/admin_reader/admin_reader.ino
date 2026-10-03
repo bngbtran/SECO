@@ -385,6 +385,11 @@ void onResult(JsonDocument &doc) {
   String error = doc["error"] | "";
   String uid = doc["uid"] | "";
 
+  // No "Gán thẻ" open: the API sent the owner of a linked card.
+  if (ok && String(doc["kind"] | "") == "CARD_INFO") {
+    notify(Icon::Info, doc["user_name"] | "", String((long)(doc["balance_vnd"] | 0L)) + " VND", uid);
+    return;
+  }
   if (ok) {
     notify(Icon::Ok, "Da doc the", uid, "Bam Hoan tat tren web");
   } else if (error == "UID_TAKEN") {

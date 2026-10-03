@@ -11,7 +11,10 @@ The desk reader is not a charging station, so it has its own MQTT namespace:
 
     seco/reader/{reader_id}/cmd     API -> reader  SCAN | DONE | CANCEL
     seco/reader/{reader_id}/scan    reader -> API  {"uid", "registration_id"?}
-    seco/reader/{reader_id}/res     API -> reader  result of a scan
+    seco/reader/{reader_id}/res     API -> reader  result of a scan; with no open
+                                                   request a linked card returns
+                                                   {"ok": true, "kind": "CARD_INFO",
+                                                    "user_name", "balance_vnd", ...}
     seco/reader/{reader_id}/hb      reader -> API  heartbeat
     seco/reader/{reader_id}/status  reader -> API  ONLINE / OFFLINE (last will)
 """
@@ -275,6 +278,29 @@ async def _reply(reader_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+async def card_info(uid: str) -> dict[str, Any] | None:
+    """Owner and wallet of a linked card, for the desk reader screen."""
+    card = await rfid_cards.find_one({"uid": uid}, {"_id": 0, "card_id": 1, "user_id": 1, "label": 1, "is_active": 1})
+    if not card or not card.get("user_id"):
+        return None
+    owner = await users.find_one(
+        {"user_id": card["user_id"]},
+        {"_id": 0, "name": 1, "role": 1, "balance_vnd": 1, "is_active": 1},
+    )
+    if not owner:
+        return None
+    return {
+        "uid": uid,
+        "card_id": card["card_id"],
+        "card_label": card.get("label"),
+        "card_active": bool(card.get("is_active")),
+        "user_name": owner["name"],
+        "role": owner["role"],
+        "user_active": bool(owner.get("is_active")),
+        "balance_vnd": int(owner.get("balance_vnd", 0)),
+    }
+
+
 async def handle_reader_scan(reader_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """A card was tapped on the desk reader."""
     uid = _normalize_uid(str(payload.get("uid", "")))
@@ -288,6 +314,10 @@ async def handle_reader_scan(reader_id: str, payload: dict[str, Any]) -> dict[st
     if registration:
         registration = await _expire_if_due(registration)
     if not registration or registration["status"] not in _OPEN:
+        # No "Gán thẻ" open: a linked card shows its owner and balance on the reader.
+        info = await card_info(uid)
+        if info:
+            return await _reply(reader_id, {"ok": True, "kind": "CARD_INFO", **info})
         return await _reply(reader_id, {"ok": False, "error": "NO_REQUEST", "uid": uid})
 
     error = None
