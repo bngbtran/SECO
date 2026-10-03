@@ -15,6 +15,8 @@ class StationResponse(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     address: str | None = None
+    # No hardware behind it (map demo); a technician's "fixed" in the app puts it back to READY.
+    is_simulated: bool = False
     # Tariff in force (the same for every station); a session keeps its own snapshot.
     price_per_kwh_vnd: int | None = None
 

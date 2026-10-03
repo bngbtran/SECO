@@ -707,6 +707,15 @@ def test_support_ticket_flow():
                 queue = (await http.get("/api/v1/technician/support-tickets?status=OPEN", headers=b_auth)).json()
                 assert ticket_id in [t["ticket_id"] for t in queue["items"]]
 
+                # The web admin sees it with the faults (still to be handled = OPEN + IN_PROGRESS).
+                admin = await f.user("ADMIN")
+                admin_auth = await admin_login(http, admin)
+                active = (await http.get(f"/api/v1/admin/support-tickets?active=true&station_id={station_id}", headers=admin_auth)).json()
+                assert [t["ticket_id"] for t in active["items"]] == [ticket_id]
+                detail = (await http.get(f"/api/v1/admin/support-tickets/{ticket_id}", headers=admin_auth)).json()
+                assert detail["station_snapshot"]["status"] == "ERROR"
+                assert (await http.get("/api/v1/admin/support-tickets", headers=a_auth)).status_code == 403
+
                 # Members cannot use technician routes.
                 response = await http.get("/api/v1/technician/support-tickets", headers=auth)
                 assert response.status_code == 403
@@ -962,6 +971,55 @@ def test_technician_station_views_and_public_price():
                 assert mine["total"] == 1 and mine["items"][0]["station_id"] == broken
 
                 assert (await http.get("/api/v1/technician/stations", headers=member_auth)).status_code == 403
+        finally:
+            await get_collection("maintenance_records").delete_many({"station_id": {"$in": f.station_ids}})
+            await f.cleanup()
+
+    run(scenario)
+
+
+def test_simulated_station_goes_ready_when_the_technician_confirms_the_fix(monkeypatch):
+    from app.modules.admin import stations as admin_stations
+
+    async def no_command(station_id, payload):
+        return True
+
+    monkeypatch.setattr(admin_stations, "publish_station_command", no_command)
+
+    async def scenario():
+        f = Fixture()
+        try:
+            member = await f.user()
+            technician = await f.user("TECHNICIAN")
+            mock = await f.station(status="ERROR", is_simulated=True)
+            error = await record_error(station_id=mock, error_type="SYSTEM_ERROR", severity="ERROR")
+            async with api() as http:
+                member_auth = await login(http, member)
+                tech_auth = await login(http, technician)
+
+                assert (await http.get(f"/api/v1/stations/{mock}")).json()["is_simulated"] is True
+                ticket = (await http.post(
+                    "/api/v1/member/support-tickets",
+                    headers=member_auth,
+                    json={"station_id": mock, "category": "STATION_DAMAGED"},
+                )).json()
+                await http.post(f"/api/v1/technician/support-tickets/{ticket['ticket_id']}/accept", headers=tech_auth)
+
+                # No card to tap at a simulated station: "fixed" in the app is enough.
+                response = await http.post(
+                    f"/api/v1/technician/support-tickets/{ticket['ticket_id']}/resolve",
+                    headers=tech_auth,
+                    json={"resolution_note": "Đã thay module nguồn"},
+                )
+                assert response.status_code == 200, response.text
+                assert response.json()["status"] == "RESOLVED"
+
+                station = (await http.get(f"/api/v1/stations/{mock}")).json()
+                assert station["status"] == "READY" and station["availability"] == "AVAILABLE"
+                assert (await error_logs.find_one({"error_id": error["error_id"]}))["resolved_by"] == technician["user_id"]
+                history = (await http.get("/api/v1/technician/maintenance", headers=tech_auth)).json()
+                assert history["items"][0]["station_id"] == mock
+                assert history["items"][0]["status"] == "COMPLETED"
         finally:
             await get_collection("maintenance_records").delete_many({"station_id": {"$in": f.station_ids}})
             await f.cleanup()

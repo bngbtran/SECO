@@ -6,12 +6,14 @@ session there), writes an audit entry and notifies every technician.
 OPEN -> IN_PROGRESS (a technician accepts it) -> RESOLVED (with a note);
 the member can cancel while it is still OPEN.
 
-Resolving a request does not change the station: only the technician at the
-station does that (technician card + STOP held 3 s: ERROR -> MAINTENANCE ->
-READY, which also closes the open errors). So a request cannot be resolved
-while its station is still in ERROR - the member would be told "fixed" while
-the station is down. MAINTENANCE is accepted (taken out of service, e.g.
-waiting for a part).
+The real station (hardware) is put back in service only at the station itself
+(technician card + STOP held 3 s: ERROR -> MAINTENANCE -> READY, which also
+closes its open errors), so its request cannot be resolved while it is still
+in ERROR - the member would be told "fixed" while it is down. MAINTENANCE is
+accepted (taken out of service, e.g. waiting for a part).
+A simulated station (is_simulated, no hardware) has nobody to tap a card: the
+technician's "fixed" in the app puts it back to READY (maintenance recorded,
+open errors closed).
 """
 
 from datetime import UTC, datetime, timedelta
@@ -32,6 +34,7 @@ from app.websocket.manager import manager
 tickets = get_collection("support_tickets")
 sessions = get_collection("charging_sessions")
 error_logs = get_collection("error_logs")
+maintenance_records = get_collection("maintenance_records")
 users = get_collection("users")
 
 OPEN_STATUSES = ("OPEN", "IN_PROGRESS")
@@ -270,13 +273,48 @@ async def accept_ticket(technician: dict, ticket_id: str) -> dict:
     return await _view(updated)
 
 
+async def _put_simulated_station_back(technician: dict, station: dict, note: str) -> None:
+    """Maintenance by this technician, completed now; the station goes READY like the
+    technician's card + STOP at a real station (errors closed, live update sent)."""
+    # Imported here: admin.stations pulls in the charging / realtime modules.
+    from app.modules.admin.stations import send_command
+
+    station_id = station["station_id"]
+    if not await maintenance_records.find_one({"station_id": station_id, "status": "IN_PROGRESS"}, {"_id": 1}):
+        open_error = await error_logs.find_one(
+            {"station_id": station_id, "resolved_at": None},
+            {"_id": 0, "error_id": 1},
+            sort=[("occurred_at", -1)],
+        )
+        now = now_utc()
+        await maintenance_records.insert_one(
+            {
+                "maintenance_id": f"MR-{uuid4().hex[:8].upper()}",
+                "station_id": station_id,
+                "technician_id": technician["user_id"],
+                "error_id": open_error["error_id"] if open_error else None,
+                "status": "IN_PROGRESS",
+                "description": f"Xác nhận đã sửa trên ứng dụng (trạm mô phỏng): {note}",
+                "started_at": now,
+                "completed_at": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+    await send_command(station_id, "READY", f"Kỹ thuật viên {technician['name']} xác nhận đã sửa: {note}", technician)
+
+
 async def resolve_ticket(technician: dict, ticket_id: str, note: str) -> dict:
     ticket = await _get(ticket_id)
     if ticket["status"] != "IN_PROGRESS" or ticket.get("assigned_to") != technician["user_id"]:
         raise BusinessRuleError("Accept the request before resolving it")
     station = await get_station(ticket["station_id"])
-    if station and station.get("status") == "ERROR":
+    simulated = bool(station and station.get("is_simulated"))
+    if station and station.get("status") == "ERROR" and not simulated:
         raise BusinessRuleError(STATION_STILL_IN_ERROR)
+    if simulated and station.get("status") in ("ERROR", "MAINTENANCE"):
+        # Before closing the request: if the station cannot go back (open session), nothing changes.
+        await _put_simulated_station_back(technician, station, note.strip())
 
     now = now_utc()
     updated = await tickets.find_one_and_update(
