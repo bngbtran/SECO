@@ -139,7 +139,8 @@ const ERRORS_VI = {
   'Card was disabled by an admin': 'Thẻ đã bị quầy vô hiệu hoá.',
   'A card reported lost cannot be unlocked; ask the desk for a new card': 'Thẻ đã báo mất không mở lại được, hãy liên hệ quầy để cấp thẻ mới.',
   'Station not found': 'Không tìm thấy trạm.',
-  'Station is still in ERROR; put it in maintenance or back to READY at the station first': 'Trạm vẫn đang lỗi: vào bảo trì hoặc đưa trạm về sẵn sàng tại trạm trước khi hoàn tất.'
+  'Station is still in ERROR; put it in maintenance or back to READY at the station first': 'Trạm vẫn đang lỗi: vào bảo trì hoặc đưa trạm về sẵn sàng tại trạm trước khi hoàn tất.',
+  'Station still has an open session': 'Trạm còn phiên sạc chưa kết thúc, chưa đưa về sẵn sàng được.'
 };
 
 const icons = {
@@ -669,10 +670,18 @@ function ticketDetailScreen() {
     if (t.status === 'OPEN') action = `<button class="btn btn-primary btn-block" data-action="acceptTicket">${icon('check')} Nhận xử lý</button>`;
     else if (t.status === 'IN_PROGRESS' && mine) {
       const live = state.data.station;
-      const stillBroken = live?.status === 'ERROR';
-      action = `<div class="live-station ${stillBroken ? 'broken' : ''}"><span>Trạm hiện tại</span>${availabilityBadge(live?.availability || 'OFFLINE')}<button type="button" class="link-btn" data-action="reload">Làm mới</button></div>${stillBroken
-        ? `<div class="notice warn">${icon('wrench')} Trạm vẫn đang <strong>LỖI</strong>. Tại trạm: quẹt <strong>thẻ kỹ thuật viên</strong> + giữ <strong>STOP 3 giây</strong> để vào bảo trì; sửa xong làm lại để đưa trạm về <strong>Sẵn sàng</strong>. Sau đó mới hoàn tất yêu cầu.</div><button class="btn btn-quiet btn-block" disabled style="margin-top:8px">Hoàn tất khi trạm hết lỗi</button>`
-        : `<form class="stack" data-form="resolveTicket"><div class="field"><label>Kết quả xử lý</label><textarea name="resolution_note" required maxlength="1000" placeholder="${live?.status === 'MAINTENANCE' ? 'Ví dụ: trạm tạm bảo trì, chờ thay cảm biến' : 'Ví dụ: đã thay cảm biến, trạm sạc lại bình thường'}"></textarea></div><button class="btn btn-primary btn-block">${icon('check')} Hoàn tất yêu cầu</button></form>`}`;
+      const simulated = Boolean(live?.is_simulated);
+      const down = ['ERROR', 'MAINTENANCE'].includes(live?.status);
+      const head = `<div class="live-station ${live?.status === 'ERROR' ? 'broken' : ''}"><span>Trạm hiện tại</span>${availabilityBadge(live?.availability || 'OFFLINE')}${simulated ? badge('Trạm mô phỏng', 'gray') : badge('Trạm thật', 'blue')}<button type="button" class="link-btn" data-action="reload">Làm mới</button></div>`;
+      const form = (hint, label, placeholder) => `${hint}<form class="stack" data-form="resolveTicket"><div class="field"><label>Kết quả xử lý</label><textarea name="resolution_note" required maxlength="1000" placeholder="${placeholder}"></textarea></div><button class="btn btn-primary btn-block">${icon('check')} ${label}</button></form>`;
+      if (simulated && down) {
+        // No hardware: the technician's confirmation puts the station back to READY.
+        action = head + form(`<div class="notice">${icon('wrench')} Trạm mô phỏng, không có phần cứng: <strong>xác nhận đã sửa</strong> sẽ đưa trạm về <strong>Sẵn sàng</strong>, đóng các lỗi đang mở và ghi vào lịch sử bảo trì của bạn.</div>`, 'Xác nhận đã sửa', 'Ví dụ: đã thay module nguồn, trạm hoạt động lại');
+      } else if (live?.status === 'ERROR') {
+        action = `${head}<div class="notice warn">${icon('wrench')} Trạm thật vẫn đang <strong>LỖI</strong>. Tại trạm: quẹt <strong>thẻ kỹ thuật viên</strong> + giữ <strong>STOP 3 giây</strong> để vào bảo trì; sửa xong làm lại để đưa trạm về <strong>Sẵn sàng</strong>. Sau đó mới hoàn tất yêu cầu.</div><button class="btn btn-quiet btn-block" disabled style="margin-top:8px">Hoàn tất khi trạm hết lỗi</button>`;
+      } else {
+        action = head + form('', 'Hoàn tất yêu cầu', live?.status === 'MAINTENANCE' ? 'Ví dụ: trạm tạm bảo trì, chờ thay cảm biến' : 'Ví dụ: đã thay cảm biến, trạm sạc lại bình thường');
+      }
     }
     else if (t.status === 'IN_PROGRESS') action = `<div class="notice">${esc(t.assigned_name)} đang xử lý yêu cầu này.</div>`;
     return `<div class="station-hero"><div class="row">${badge(label, tone)}<span class="subtle">${fAgo(t.created_at)}</span></div><h2>${esc(t.category_label)}</h2><p>${esc(t.station_name || t.station_id)} · ${esc(t.station_id)}</p>${t.description ? `<p style="margin-top:8px;color:var(--ink)">${esc(t.description)}</p>` : ''}</div><div class="section-label">Member</div><div class="info-card row"><div class="profile-avatar small">${esc(initials(t.user_name))}</div><div style="flex:1"><strong>${esc(t.user_name || '—')}</strong><div class="subtle">${esc(t.user_phone || 'Chưa có số điện thoại')}</div></div>${t.user_phone ? `<a class="icon-btn" href="tel:${esc(t.user_phone.replace(/[^0-9+]/g, ''))}" aria-label="Gọi">${icon('phone')}</a>` : ''}</div><div class="row section-label"><span>Trạm lúc gửi yêu cầu</span><button class="link-btn" data-go="techStationDetail" data-station="${esc(t.station_id)}">Xem trạm hiện tại</button></div><div class="info-card">${keyval('Trạng thái', `${availabilityBadge(snap.availability || (snap.is_online === false ? 'OFFLINE' : snap.status))}`)}${keyval('Kết nối', snap.is_online ? 'Online' : 'Offline')}${keyval('Đầu sạc', LOCK_LABEL[snap.connector_lock] || '—')}${keyval('Heartbeat', fDateTime(snap.last_heartbeat_at))}${t.session_id ? keyval('Phiên liên quan', `<span class="mono">${esc(t.session_id.slice(0, 8))}</span>`) : ''}</div><div style="margin-top:9px">${telemetryGrid(snap.latest_telemetry)}</div>${(snap.open_errors || []).length ? `<div class="section-label">Lỗi đang mở lúc đó</div><div class="stack">${snap.open_errors.map(errorRow).join('')}</div>` : ''}${t.resolution_note ? `<div class="section-label">Kết quả xử lý</div><div class="info-card">${esc(t.resolution_note)}<div class="subtle" style="margin-top:6px">${esc(t.assigned_name)} · ${fDateTime(t.resolved_at)}</div></div>` : ''}${action ? `<div class="sticky-action">${action}</div>` : ''}`;
@@ -686,7 +695,7 @@ function techStationsScreen() {
 function techStationDetailScreen() {
   return shell(content(`${pageHead('Chi tiết trạm')}${whenLoaded('detail', (d) => {
     const s = d.station;
-    return `<div class="station-hero">${availabilityBadge(s.availability)}<h2>${esc(s.station_id)} · ${esc(s.name)}</h2><p>${icon('pin')} ${esc(s.address || 'Chưa có địa chỉ')}</p><div class="metric-grid"><div class="metric"><span>Trạng thái</span><strong>${esc(s.status)}</strong></div><div class="metric"><span>Đầu sạc</span><strong>${LOCK_LABEL[s.connector_lock] || '—'}</strong></div><div class="metric"><span>Heartbeat</span><strong>${fAgo(s.last_heartbeat_at)}</strong></div></div></div><button class="btn btn-secondary btn-block" style="margin-top:10px" data-action="directions" data-station="${esc(s.station_id)}" data-lat="${s.latitude ?? ''}" data-lng="${s.longitude ?? ''}">${icon('navigation')} Chỉ đường tới trạm</button><div class="section-label">Telemetry mới nhất</div>${telemetryGrid(d.latest_telemetry)}<div class="section-label">Lỗi đang mở (${d.open_errors.length})</div>${d.open_errors.length ? `<div class="stack">${d.open_errors.map(errorRow).join('')}</div>` : '<p class="subtle">Không có lỗi đang mở.</p>'}<div class="section-label">Yêu cầu hỗ trợ đang mở (${d.open_tickets.length})</div>${d.open_tickets.length ? `<div class="stack">${d.open_tickets.map((t) => ticketRow(t, 'ticketDetail')).join('')}</div>` : '<p class="subtle">Không có yêu cầu.</p>'}<div class="section-label">Bảo trì tại trạm</div><div class="notice">${icon('wrench')} Vào / ra bảo trì ngay tại trạm: quẹt <strong>thẻ kỹ thuật viên</strong> rồi <strong>giữ nút STOP 3 giây</strong>. Trạm chỉ về READY khi đã an toàn (nhiệt độ dưới ngưỡng).</div>${d.maintenance.length ? `<div class="list-card" style="margin-top:10px">${d.maintenance.map(maintenanceRow).join('')}</div>` : ''}`;
+    return `<div class="station-hero">${availabilityBadge(s.availability)}<h2>${esc(s.station_id)} · ${esc(s.name)}</h2><p>${icon('pin')} ${esc(s.address || 'Chưa có địa chỉ')}</p><div class="metric-grid"><div class="metric"><span>Trạng thái</span><strong>${esc(s.status)}</strong></div><div class="metric"><span>Đầu sạc</span><strong>${LOCK_LABEL[s.connector_lock] || '—'}</strong></div><div class="metric"><span>Heartbeat</span><strong>${fAgo(s.last_heartbeat_at)}</strong></div></div></div><button class="btn btn-secondary btn-block" style="margin-top:10px" data-action="directions" data-station="${esc(s.station_id)}" data-lat="${s.latitude ?? ''}" data-lng="${s.longitude ?? ''}">${icon('navigation')} Chỉ đường tới trạm</button><div class="section-label">Telemetry mới nhất</div>${telemetryGrid(d.latest_telemetry)}<div class="section-label">Lỗi đang mở (${d.open_errors.length})</div>${d.open_errors.length ? `<div class="stack">${d.open_errors.map(errorRow).join('')}</div>` : '<p class="subtle">Không có lỗi đang mở.</p>'}<div class="section-label">Yêu cầu hỗ trợ đang mở (${d.open_tickets.length})</div>${d.open_tickets.length ? `<div class="stack">${d.open_tickets.map((t) => ticketRow(t, 'ticketDetail')).join('')}</div>` : '<p class="subtle">Không có yêu cầu.</p>'}<div class="section-label">Bảo trì ${s.is_simulated ? badge('Trạm mô phỏng', 'gray') : badge('Trạm thật', 'blue')}</div><div class="notice">${icon('wrench')} ${s.is_simulated ? 'Trạm mô phỏng không có phần cứng: nhận yêu cầu hỗ trợ của trạm rồi bấm <strong>Xác nhận đã sửa</strong> để đưa trạm về Sẵn sàng.' : 'Vào / ra bảo trì ngay tại trạm: quẹt <strong>thẻ kỹ thuật viên</strong> rồi <strong>giữ nút STOP 3 giây</strong>. Trạm chỉ về READY khi đã an toàn (nhiệt độ dưới ngưỡng).'}</div>${d.maintenance.length ? `<div class="list-card" style="margin-top:10px">${d.maintenance.map(maintenanceRow).join('')}</div>` : ''}`;
   })}`), bottomNav('techStations'));
 }
 
@@ -956,6 +965,20 @@ function connectRealtime() {
   };
 }
 
+/** Screens whose data a notification type changes (they reload when it arrives). */
+const SCREENS_FOR_NOTIFICATION = {
+  CARD_ASSIGNED: ['cards', 'account'],
+  CARD_BLOCKED: ['cards', 'account'],
+  CARD_UNLOCKED: ['cards', 'account'],
+  TOPUP_SUCCEEDED: ['wallet', 'transactions'],
+  CHARGING_COMPLETED: ['wallet', 'transactions', 'history', 'charge'],
+  LOW_BALANCE: ['wallet'],
+  SUPPORT_TICKET_ACCEPTED: ['support', 'supportDetail'],
+  SUPPORT_TICKET_RESOLVED: ['support', 'supportDetail'],
+  SUPPORT_TICKET_CREATED: ['techRequests'],
+  STATION_ERROR: ['techStations', 'techStationDetail', 'techRequests', 'ticketDetail']
+};
+
 function onRealtime(event) {
   if (event.type === 'notification') {
     const n = event.notification;
@@ -963,9 +986,12 @@ function onRealtime(event) {
     updateBadges();
     toast(n.title);
     if ('Notification' in window && window.Notification.permission === 'granted' && document.hidden) new window.Notification(n.title, { body: n.body, tag: n.notification_id });
-    if (state.screen === 'notifications') void loadScreen();
+    if (state.screen === 'notifications' || (SCREENS_FOR_NOTIFICATION[n.type] || []).includes(state.screen)) void loadScreen();
+    if (['TOPUP_SUCCEEDED', 'CHARGING_COMPLETED', 'LOW_BALANCE'].includes(n.type)) void refreshWallet().then(() => { if (state.screen === 'wallet') render(); }).catch(() => null);
+    if (n.type === 'STATION_ERROR') scheduleStationsRefresh();
     return;
   }
+  if (event.type === 'member_session_updated' && (event.event === 'STARTED' || event.event === 'STOPPED')) scheduleStationsRefresh();
   if (event.type === 'member_session_updated' && isMember() && event.user_id === state.user.user_id) {
     if (event.event === 'STOPPED') {
       state.session = null;
@@ -995,7 +1021,10 @@ function onRealtime(event) {
   }
   if (['station_updated', 'station_status', 'station_error'].includes(event.type)) {
     scheduleStationsRefresh();
-    if (state.screen === 'techStations' || (state.screen === 'techStationDetail' && state.params.station === event.station_id)) void loadScreen();
+    const showsStation = state.params.station === event.station_id || state.data.ticket?.station_id === event.station_id;
+    if (state.screen === 'techStations' || state.screen === 'techRequests' || (['techStationDetail', 'ticketDetail'].includes(state.screen) && showsStation)) {
+      if (!document.activeElement?.matches('textarea, input')) void loadScreen();
+    }
   }
 }
 
@@ -1087,6 +1116,7 @@ const FORMS = {
   async resolveTicket(f) {
     await api(`/technician/support-tickets/${encodeURIComponent(state.params.ticket)}/resolve`, { method: 'POST', body: { resolution_note: f.resolution_note.trim() } });
     toast('Đã hoàn tất yêu cầu, member đã được thông báo');
+    scheduleStationsRefresh();
     void loadScreen();
   }
 };
@@ -1232,8 +1262,22 @@ appRoot.addEventListener('change', (event) => {
 // Boot
 // ---------------------------------------------------------------------------
 
+/** The app was in the background (WebSocket may have dropped): reload what is on screen. */
+let lastCatchUp = 0;
+function catchUp() {
+  if (document.hidden || !state.user || Date.now() - lastCatchUp < 3000) return;
+  lastCatchUp = Date.now();
+  void refreshStations();
+  void refreshUnread();
+  if (isMember()) void refreshChargingState().catch(() => null);
+  if (!state.ws) connectRealtime();
+  if (!document.activeElement?.matches('textarea, input, select')) void loadScreen();
+}
+
 async function boot() {
   render();
+  document.addEventListener('visibilitychange', catchUp);
+  window.addEventListener('focus', catchUp);
   void refreshStations();
   window.setInterval(refreshStations, cfg.stationsRefreshMs);
   window.setInterval(updateCountdowns, 1000);
