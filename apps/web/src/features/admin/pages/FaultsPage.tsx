@@ -1,4 +1,4 @@
-import { AlertOctagon, AlertTriangle, CheckCircle, ExternalLink, Wrench } from "lucide-react";
+import { AlertOctagon, AlertTriangle, CheckCircle, ExternalLink, MessageSquareWarning, Wrench } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -7,7 +7,7 @@ import { fDate, rel, shortId } from "../../../shared/format";
 import { useApi } from "../../../shared/hooks";
 import { ERROR_LABEL } from "../../../shared/labels";
 import { useRealtimeRefresh } from "../../../shared/realtime";
-import type { AdminDashboard, AdminErrorLog, Page } from "../../../shared/types";
+import type { AdminDashboard, AdminErrorLog, AdminSupportTicket, Page } from "../../../shared/types";
 import {
   Badge,
   Chip,
@@ -21,6 +21,7 @@ import {
   SeverityBadge,
   useToast,
 } from "../../../shared/ui";
+import SupportTicketsPanel from "./SupportTicketsPanel";
 
 const PAGE_SIZE = 25;
 
@@ -104,6 +105,8 @@ export default function FaultsPage() {
   const [severity, setSeverity] = useState("");
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<AdminErrorLog | null>(null);
+  // Station errors (error_logs) or reports sent by members from the app (support_tickets).
+  const [tab, setTab] = useState<"errors" | "reports">("errors");
 
   const list = useApi<Page<AdminErrorLog>>("/admin/errors", {
     resolved: filter === "ALL" ? undefined : filter === "RESOLVED",
@@ -113,21 +116,21 @@ export default function FaultsPage() {
   });
   const open = useApi<Page<AdminErrorLog>>("/admin/errors", { resolved: false, limit: 1 });
   const critical = useApi<Page<AdminErrorLog>>("/admin/errors", { resolved: false, severity: "CRITICAL", limit: 1 });
-  const resolved = useApi<Page<AdminErrorLog>>("/admin/errors", { resolved: true, limit: 1 });
+  const activeReports = useApi<Page<AdminSupportTicket>>("/admin/support-tickets", { active: true, limit: 1 });
   const dashboard = useApi<AdminDashboard>("/admin/dashboard");
 
   const reloadAll = () => {
     void list.reload();
     void open.reload();
     void critical.reload();
-    void resolved.reload();
+    void activeReports.reload();
     void dashboard.reload();
   };
   useRealtimeRefresh(reloadAll, (e) => e.type === "station_error" || e.type === "station_updated", 800);
 
   return (
     <>
-      <PageHeader title="Sự cố" subtitle="error_logs · quá nhiệt, E-Stop, lỗi cảm biến, mất kết nối" />
+      <PageHeader title="Sự cố" subtitle="Lỗi do trạm tự báo và báo cáo hư hỏng từ member" />
 
       <div className="kpis">
         <Kpi icon={AlertOctagon} iconColor="var(--red)" label="Đang mở" value={open.data?.total ?? "—"} hint="Chưa được xử lý" />
@@ -139,10 +142,28 @@ export default function FaultsPage() {
           value={dashboard.data ? `${dashboard.data.stations_by_availability.ERROR} / ${dashboard.data.stations_by_availability.MAINTENANCE}` : "—"}
           hint="ERROR / MAINTENANCE"
         />
-        <Kpi icon={CheckCircle} label="Đã xử lý" value={resolved.data?.total ?? "—"} hint="Tổng số lỗi đã đóng" />
+        <Kpi
+          icon={MessageSquareWarning}
+          iconColor="var(--amber)"
+          label="Báo cáo từ member"
+          value={activeReports.data?.total ?? "—"}
+          hint="Đang chờ / đang xử lý"
+        />
       </div>
 
       <div className="card">
+        <div className="tabs-u">
+          <button className={tab === "errors" ? "on" : ""} onClick={() => setTab("errors")}>
+            Lỗi trạm ({open.data?.total ?? "…"} đang mở)
+          </button>
+          <button className={tab === "reports" ? "on" : ""} onClick={() => setTab("reports")}>
+            Báo cáo từ member ({activeReports.data?.total ?? "…"} đang mở)
+          </button>
+        </div>
+        {tab === "reports" ? (
+          <SupportTicketsPanel onChanged={() => void activeReports.reload()} />
+        ) : (
+        <>
         <div className="toolbar">
           {(
             [
@@ -236,6 +257,8 @@ export default function FaultsPage() {
           </div>
         )}
         {list.data && <Pager total={list.data.total} limit={PAGE_SIZE} offset={offset} onChange={setOffset} summary={`${list.data.total} sự cố`} />}
+        </>
+        )}
       </div>
 
       {selected && (

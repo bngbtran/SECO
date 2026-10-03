@@ -266,3 +266,35 @@ export interface RealtimeEvent {
   data?: Record<string, unknown>;
   [key: string]: unknown;
 }
+
+export interface AdminSupportTicket {
+  ticket_id: string;
+  station_id: string;
+  station_name: string | null;
+  category: string;
+  category_label: string;
+  description: string;
+  status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CANCELLED";
+  session_id: string | null;
+  user_id: string;
+  user_name: string | null;
+  user_phone: string | null;
+  assigned_to: string | null;
+  assigned_name: string | null;
+  assigned_at: string | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Station state when the member sent the report. */
+  station_snapshot: {
+    status?: string;
+    availability?: string;
+    is_online?: boolean;
+    connector_lock?: string;
+    last_heartbeat_at?: string | null;
+    latest_telemetry?: Record<string, unknown> | null;
+    open_errors?: { error_id: string; error_type: string; severity: string; message: string; occurred_at: string }[];
+  };
+}

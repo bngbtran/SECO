@@ -102,3 +102,17 @@ export const CARD_BLOCK_LABEL: Record<string, string> = {
   LOCKED: "Đã khoá",
   LOST: "Báo mất",
 };
+
+export const TICKET_STATUS_LABEL: Record<string, string> = {
+  OPEN: "Chờ KTV nhận",
+  IN_PROGRESS: "Đang xử lý",
+  RESOLVED: "Đã xử lý",
+  CANCELLED: "Member đã huỷ",
+};
+
+export const TICKET_STATUS_BADGE: Record<string, string> = {
+  OPEN: "b-error",
+  IN_PROGRESS: "b-maint",
+  RESOLVED: "b-ready",
+  CANCELLED: "b-gray",
+};

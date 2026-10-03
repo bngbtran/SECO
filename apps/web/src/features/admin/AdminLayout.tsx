@@ -20,7 +20,7 @@ import { useAuth } from "../../shared/auth";
 import { initials } from "../../shared/format";
 import { useApi } from "../../shared/hooks";
 import { useRealtime, useRealtimeRefresh } from "../../shared/realtime";
-import type { AdminErrorLog, Page } from "../../shared/types";
+import type { AdminErrorLog, AdminSupportTicket, Page } from "../../shared/types";
 import { ChangePasswordDialog } from "./PasswordDialogs";
 
 const NAV: [string, [string, LucideIcon, string][]][] = [
@@ -79,8 +79,11 @@ export default function AdminLayout() {
   const { connected } = useRealtime();
   const navigate = useNavigate();
   const openErrors = useApi<Page<AdminErrorLog>>("/admin/errors", { resolved: false, limit: 1 });
+  const openReports = useApi<Page<AdminSupportTicket>>("/admin/support-tickets", { active: true, limit: 1 });
   useRealtimeRefresh(openErrors.reload, (e) => e.type === "station_error" || e.type === "station_updated");
-  const openCount = openErrors.data?.total ?? 0;
+  useRealtimeRefresh(openReports.reload, (e) => e.type === "support_ticket_updated", 500);
+  // Station errors + member reports still to be handled.
+  const openCount = (openErrors.data?.total ?? 0) + (openReports.data?.total ?? 0);
   const [changingPassword, setChangingPassword] = useState(false);
 
   return (
