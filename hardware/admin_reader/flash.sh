@@ -2,7 +2,8 @@
 # Build + upload the reader to a real ESP32 over USB, then open the serial monitor.
 # Usage:  ./flash.sh              ESP32-S3 DevKitC (default)
 #         BOARD=esp32 ./flash.sh  ESP32 DevKit (WROOM)
-#         PORT=/dev/cu.usbserial-0001 ./flash.sh   pick the port yourself
+#         PORT=COM3 ./flash.sh    pick the port yourself (macOS: /dev/cu.usbserial-0001)
+# Windows: run from Git Bash.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -27,16 +28,27 @@ for lib in PubSubClient ArduinoJson MFRC522 "Adafruit SSD1306" "Adafruit GFX Lib
   arduino-cli lib list | grep -q "^${lib} " || arduino-cli lib install "$lib"
 done
 
-# First USB serial port (CP210x / CH340 = usbserial, native USB = usbmodem).
-PORT="${PORT:-$(ls /dev/cu.usbserial* /dev/cu.usbmodem* /dev/cu.wchusbserial* 2>/dev/null | head -1 || true)}"
+# First USB serial port, macOS (/dev/cu.*) or Windows (COMx). Bluetooth ports
+# have no USB VID and are skipped. VID 303A = the ESP32-S3 native USB port.
+read -r FOUND_PORT FOUND_VID < <(python - <<'EOF'
+from serial.tools import list_ports
+usb = [p for p in list_ports.comports() if p.vid is not None]
+print(f"{usb[0].device} {usb[0].vid:04X}" if usb else "")
+EOF
+) || true
+PORT="${PORT:-${FOUND_PORT:-}}"
 if [ -z "$PORT" ]; then
-  echo "No ESP32 found on USB. Plug it in (data cable), or set PORT=/dev/cu.xxx"; exit 1
+  echo "No ESP32 found on USB. Plug it in (data cable), or set PORT=COM3 / PORT=/dev/cu.xxx"; exit 1
+fi
+NATIVE_USB=0
+if [[ "$PORT" == *usbmodem* ]] || { [ "$PORT" == "${FOUND_PORT:-}" ] && [ "${FOUND_VID:-}" == "303A" ]; }; then
+  NATIVE_USB=1
 fi
 # Serial goes to the port you are plugged into: the "UART" port (usbserial,
 # USB-UART chip) needs CDC off, the native "USB" port (usbmodem) needs CDC on.
 case "${BOARD:-esp32s3}" in
   esp32s3)
-    if [[ "$PORT" == *usbmodem* ]]; then FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc"
+    if [ "$NATIVE_USB" == 1 ]; then FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc"
     else FQBN="esp32:esp32:esp32s3:CDCOnBoot=default"; fi ;;
   esp32) FQBN="esp32:esp32:esp32" ;;
   *) echo "BOARD must be esp32s3 or esp32"; exit 1 ;;
