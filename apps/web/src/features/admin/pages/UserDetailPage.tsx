@@ -1,13 +1,16 @@
 import {
   Car,
   CreditCard,
+  KeyRound,
   Link as LinkIcon,
   Lock,
+  LockOpen,
   Nfc,
   Pencil,
   Receipt,
   Trash2,
   RefreshCw,
+  ShieldAlert,
   Unlink,
   UserCheck,
   UserX,
@@ -17,9 +20,10 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../../../shared/api";
+import { useAuth } from "../../../shared/auth";
 import { fDay, initials, shortId, vnd } from "../../../shared/format";
 import { useApi } from "../../../shared/hooks";
-import { CARD_BADGE } from "../../../shared/labels";
+import { CARD_BADGE, CARD_BLOCK_LABEL } from "../../../shared/labels";
 import { useRealtimeRefresh } from "../../../shared/realtime";
 import type { AdminCard, AdminSession, AdminTransaction, AdminUserDetail, Page } from "../../../shared/types";
 import {
@@ -34,6 +38,7 @@ import {
   useToast,
 } from "../../../shared/ui";
 import { SessionTable, TransactionTable, UserFormDialog } from "../components";
+import { TemporaryPasswordDialog } from "../PasswordDialogs";
 import { RegisterCardDialog } from "../RegisterCardDialog";
 
 type Tab = "cards" | "vehicles" | "sessions" | "tx" | "info";
@@ -68,10 +73,12 @@ export default function UserDetailPage() {
   const { userId = "" } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user: me } = useAuth();
   const detail = useApi<AdminUserDetail>(`/admin/users/${userId}`);
   const spent = useApi<Page<AdminTransaction>>("/admin/transactions", { user_id: userId, type: "CHARGING", limit: 200 });
   const [tab, setTab] = useState<Tab>("cards");
   const [editing, setEditing] = useState(false);
+  const [issuingPassword, setIssuingPassword] = useState(false);
   // null = closed; { replace: card } = swap that card; { replace: null } = add a card.
   const [scan, setScan] = useState<{ replace: AdminCard | null } | null>(null);
   const [params, setParams] = useSearchParams();
@@ -128,6 +135,33 @@ export default function UserDetailPage() {
     }
   };
 
+  // Only the card: the account and the member's other cards keep working.
+  const blockCard = async (card: AdminCard, reason: "LOCKED" | "LOST") => {
+    const name = card.uid ?? card.card_id;
+    const question =
+      reason === "LOST"
+        ? `Báo mất thẻ ${name} của ${u.name}? Thẻ bị vô hiệu vĩnh viễn; dùng "Đổi thẻ" để cấp thẻ mới.`
+        : `Khoá thẻ ${name} của ${u.name}? Thẻ không quẹt sạc được cho tới khi mở khoá.`;
+    if (!window.confirm(question)) return;
+    try {
+      await api(`/admin/rfid-cards/${card.card_id}/block`, { method: "POST", body: { reason } });
+      toast(reason === "LOST" ? "Đã báo mất thẻ" : "Đã khoá thẻ", name);
+      void detail.reload();
+    } catch (e) {
+      toast("Không khoá được thẻ", (e as Error).message, "error");
+    }
+  };
+
+  const unlockCard = async (card: AdminCard) => {
+    try {
+      await api(`/admin/rfid-cards/${card.card_id}`, { method: "PATCH", body: { is_active: true } });
+      toast("Đã mở khoá thẻ", card.uid ?? card.card_id);
+      void detail.reload();
+    } catch (e) {
+      toast("Không mở khoá được thẻ", (e as Error).message, "error");
+    }
+  };
+
   const TABS: [Tab, string][] = [
     ["cards", `Thẻ RFID (${u.cards.length})`],
     ["vehicles", `Xe (${u.vehicles.length})`],
@@ -153,6 +187,12 @@ export default function UserDetailPage() {
           </div>
         </div>
         <div className="row">
+          {me?.user_id !== u.user_id && u.is_active && (
+            <button className="btn btn-outline" onClick={() => setIssuingPassword(true)} title="Khi người dùng quên mật khẩu">
+              <KeyRound size={15} />
+              Cấp mật khẩu tạm
+            </button>
+          )}
           <button className="btn btn-outline" onClick={toggleActive}>
             {u.is_active ? <UserX size={15} /> : <UserCheck size={15} />}
             {u.is_active ? "Khoá tài khoản" : "Mở khoá"}
@@ -218,32 +258,59 @@ export default function UserDetailPage() {
                       <span style={{ color: "var(--primary)" }}>
                         <Nfc size={18} />
                       </span>
-                      <Badge cls={CARD_BADGE[c.status]} dot={false}>
-                        {c.status}
-                      </Badge>
+                      {c.block_reason ? (
+                        <Badge cls={CARD_BADGE[c.block_reason]} dot={false}>
+                          {CARD_BLOCK_LABEL[c.block_reason]}
+                        </Badge>
+                      ) : (
+                        <Badge cls={CARD_BADGE[c.status]} dot={false}>
+                          {c.status}
+                        </Badge>
+                      )}
                     </div>
                     <div className="mono" style={{ fontSize: 17, fontWeight: 600, margin: "18px 0 4px", letterSpacing: ".06em" }}>
                       {c.uid ?? "Chờ quét UID"}
                     </div>
-                    <div className="between muted" style={{ fontSize: 12 }}>
-                      <span>
-                        {c.label ?? c.card_id} · {fDay(c.created_at)}
-                      </span>
-                      <span className="row" style={{ gap: 2 }}>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setScan({ replace: c })}
-                          disabled={!u.is_active}
-                          title="Quét thẻ mới thay cho thẻ này"
-                        >
-                          <RefreshCw size={14} />
-                          Đổi thẻ
+                    <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                      {c.label ?? c.card_id} · {fDay(c.created_at)}
+                      {c.block_reason === "LOST" && " · dùng Đổi thẻ để cấp thẻ mới"}
+                    </div>
+                    <div className="row" style={{ gap: 2, flexWrap: "wrap", margin: "0 -6px" }}>
+                      {c.status === "ACTIVE" && (
+                        <>
+                          <button className="btn btn-ghost btn-sm" onClick={() => blockCard(c, "LOCKED")} title="Tạm khoá thẻ">
+                            <Lock size={14} />
+                            Khoá
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => blockCard(c, "LOST")}
+                            title="Member báo mất thẻ: vô hiệu vĩnh viễn"
+                          >
+                            <ShieldAlert size={14} />
+                            Báo mất
+                          </button>
+                        </>
+                      )}
+                      {c.status === "INACTIVE" && c.block_reason !== "LOST" && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => unlockCard(c)} disabled={!u.is_active}>
+                          <LockOpen size={14} />
+                          Mở khoá
                         </button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => unlink(c)} title="Gỡ link thẻ">
-                          <Unlink size={14} />
-                          Gỡ
-                        </button>
-                      </span>
+                      )}
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setScan({ replace: c })}
+                        disabled={!u.is_active}
+                        title="Quét thẻ mới thay cho thẻ này"
+                      >
+                        <RefreshCw size={14} />
+                        Đổi thẻ
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => unlink(c)} title="Gỡ link thẻ">
+                        <Unlink size={14} />
+                        Gỡ
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -327,6 +394,7 @@ export default function UserDetailPage() {
           }}
         />
       )}
+      {issuingPassword && <TemporaryPasswordDialog user={u} onClose={() => setIssuingPassword(false)} />}
       {scan && (
         <RegisterCardDialog
           userId={u.user_id}

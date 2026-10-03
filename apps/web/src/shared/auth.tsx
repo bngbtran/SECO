@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { UNAUTHORIZED_EVENT, api, tokenStore } from "./api";
-import type { Me } from "./types";
+import type { LoginResult, Me } from "./types";
 
 interface AuthState {
   user: Me | null;
@@ -9,6 +9,8 @@ interface AuthState {
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Sign in with a token the API just issued (change / reset password). */
+  applySession: (result: LoginResult) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -42,15 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await api<{ access_token: string; user: Me }>("/admin/auth/login", {
-      method: "POST",
-      body: { email, password },
-    });
+  const applySession = useCallback((result: LoginResult) => {
     tokenStore.set(result.access_token);
     setUser(result.user);
     setToken(result.access_token);
   }, []);
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      applySession(await api<LoginResult>("/admin/auth/login", { method: "POST", body: { email, password } }));
+    },
+    [applySession],
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -63,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, ready, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, token, ready, login, logout, applySession }}>{children}</AuthContext.Provider>
   );
 }
 

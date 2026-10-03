@@ -98,6 +98,16 @@ class AdminCardLink(BaseModel):
     user_id: str
 
 
+class AdminCardBlock(BaseModel):
+    # LOCKED: temporary, the desk unlocks it; LOST: final, the desk issues a new card.
+    reason: Literal["LOCKED", "LOST"]
+
+
+class TemporaryPassword(BaseModel):
+    temporary_password: str
+    expires_at: datetime
+
+
 class AdminVehicle(BaseModel):
     vehicle_id: str
     plate_number: str

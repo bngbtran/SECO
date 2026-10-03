@@ -50,6 +50,8 @@ class Settings(BaseSettings):
 
     # Forgot password: a temporary password stands in for the old one.
     password_reset_ttl_minutes: int = 10
+    # Longer when an admin hands it over (in person, by phone).
+    admin_temp_password_ttl_minutes: int = 60
     password_reset_max_attempts: int = 5
 
     # Member notification after a session when the balance drops below this.
