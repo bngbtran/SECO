@@ -35,6 +35,7 @@ from app.modules.admin.common import http_errors
 from app.modules.admin.users import _card_owner, _normalize_uid
 from app.modules.charging.realtime import to_jsonable
 from app.modules.logs.service import record_audit
+from app.modules.notifications import events
 from app.websocket.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -347,7 +348,7 @@ async def complete_registration(registration_id: str, label: str | None, actor: 
     if registration["status"] != "SCANNED" or not registration.get("uid"):
         raise BusinessRuleError("Chưa nhận được UID từ đầu đọc")
 
-    await _card_owner(registration["user_id"])
+    owner = await _card_owner(registration["user_id"])
     uid = registration["uid"]
     now = now_utc()
 
@@ -366,6 +367,10 @@ async def complete_registration(registration_id: str, label: str | None, actor: 
                     "label": label or existing.get("label"),
                     "is_active": True,
                     "pending": False,
+                    # Scanned at the desk, so a card once reported lost is back in hand.
+                    "block_reason": None,
+                    "blocked_at": None,
+                    "blocked_by": None,
                     "updated_at": now,
                 }
             },
@@ -419,6 +424,9 @@ async def complete_registration(registration_id: str, label: str | None, actor: 
         metadata={"uid": uid, "user_id": registration["user_id"], "replaced_uid": replaced_uid},
     )
     await _broadcast(completed)
+    card = await rfid_cards.find_one({"card_id": card_id}, {"_id": 0})
+    if card:
+        await events.card_assigned(owner, card)
     return view
 
 

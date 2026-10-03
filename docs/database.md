@@ -45,8 +45,10 @@ in `schema_migrations` so it runs once per database.
 | 0002 | DB-02 | `charging_sessions`, `wallet_holds`, `transactions`, `payment_intents` |
 | 0003 | DB-03 | `maintenance_records`, `error_logs`, `audit_logs` |
 | 0004 | UC-A02, UC-A04 | `price_history` (electricity price, one row in force); RFID cards may have no owner; `users.phone` |
+| 0005 | FR02 | `card_registrations`, `rfid_readers` (assign a card on the admin desk reader) |
+| 0006 | Account, support | `password_resets` (forgot-password temporary passwords, TTL), `notifications` (in-app inbox, kept 90 days), `support_tickets`, `favorite_stations`; `rfid_cards.block_reason` (`LOCKED` / `LOST`) |
 
-To change the schema, add `m0004_<name>.py` with `VERSION = 4` and an `up(db)`,
+To change the schema, add `m0007_<name>.py` with `VERSION = 7` and an `up(db)`,
 and append it to `MIGRATIONS` in `app/db/migrations/__init__.py`. Do not edit a
 migration that is already applied.
 
@@ -54,7 +56,9 @@ Key rules enforced by indexes:
 
 - one open (`ACTIVE`/`WAITING_PAYMENT`) session per station and per member;
 - a session is charged / paid at most once per transaction type;
-- a guest session has at most one open QR and one successful payment.
+- a guest session has at most one open QR and one successful payment;
+- a member has at most one open (`OPEN`/`IN_PROGRESS`) support ticket per station;
+- a station is pinned at most once per member.
 
 ## Demo data (DB-04)
 

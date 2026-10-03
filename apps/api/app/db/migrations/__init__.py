@@ -17,6 +17,7 @@ from app.db.migrations import (
     m0003_logs,
     m0004_admin,
     m0005_rfid_registration,
+    m0006_account_support,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ MIGRATIONS: list[ModuleType] = [
     m0003_logs,
     m0004_admin,
     m0005_rfid_registration,
+    m0006_account_support,
 ]
 
 LEDGER = "schema_migrations"

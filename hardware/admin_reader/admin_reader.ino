@@ -33,6 +33,7 @@
 #include <PubSubClient.h>
 #include <SPI.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <Wire.h>
 
 // ---- Configuration ---------------------------------------------------------
@@ -42,6 +43,13 @@
 #else
 #warning "config.h not found - using config.example.h. Copy it to config.h and set your WiFi."
 #include "config.example.h"
+#endif
+#ifndef MQTT_TLS  // config.h made before cloud MQTT
+#define MQTT_TLS 0
+#endif
+#ifndef MQTT_USERNAME
+#define MQTT_USERNAME nullptr
+#define MQTT_PASSWORD nullptr
 #endif
 #ifndef OLED_ENABLED  // config.h made before the OLED switch
 #define OLED_ENABLED 1
@@ -74,7 +82,11 @@ const unsigned long MESSAGE_MS = 3500;  // how long a result stays on the OLED
 
 // ---- State -----------------------------------------------------------------
 
+#if MQTT_TLS
+WiFiClientSecure wifi;  // TLS
+#else
 WiFiClient wifi;
+#endif
 PubSubClient mqtt(wifi);
 Adafruit_SSD1306 oled(128, 64, &Wire, -1);  // SSD1306 128x64 I2C
 MFRC522 rfid(RFID_SS, RFID_RST);
@@ -398,7 +410,7 @@ void onMessage(char *rawTopic, byte *payload, unsigned int length) {
 void connectMqtt() {
   String clientId = String("seco-") + READER_ID + "-" + String((uint32_t)ESP.getEfuseMac(), HEX);
   // Last will: the broker marks the reader OFFLINE if we disappear.
-  if (mqtt.connect(clientId.c_str(), nullptr, nullptr, topic("status").c_str(), 0, true, "OFFLINE")) {
+  if (mqtt.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD, topic("status").c_str(), 0, true, "OFFLINE")) {
     mqtt.publish(topic("status").c_str(), "ONLINE", true);
     mqtt.subscribe(topic("cmd").c_str());
     mqtt.subscribe(topic("res").c_str());
@@ -549,8 +561,12 @@ void setup() {
 
   connectWifi();
 
+#if MQTT_TLS
+  wifi.setInsecure();  // encrypted; pin the CA (wifi.setCACert) for a private broker
+#endif
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setBufferSize(1024);
+  mqtt.setKeepAlive(30);
   mqtt.setCallback(onMessage);
   connectMqtt();
   Serial.println("Tap a card on the MFRC522 or type a hex UID + Enter");

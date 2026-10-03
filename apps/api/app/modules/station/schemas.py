@@ -14,3 +14,7 @@ class StationResponse(BaseModel):
     last_heartbeat_at: datetime | None = None
     latitude: float | None = None
     longitude: float | None = None
+
+
+class FavoriteStationResponse(StationResponse):
+    favorited_at: datetime

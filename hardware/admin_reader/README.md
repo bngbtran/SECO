@@ -61,6 +61,10 @@ Copy `config.example.h` thành `config.h` (cùng thư mục) rồi sửa:
 - IP của máy: `ipconfig getifaddr en0` (macOS). ESP32 và laptop phải ở **cùng một mạng WiFi**.
 - **Không** dùng `localhost` hay `host.wokwi.internal`: đó là địa chỉ cho bản mô phỏng.
 
+**Chọn broker trong `config.h`.** Đầu đọc và API phải dùng chung một broker:
+- **API trên Render:** `MQTT_HOST "broker.hivemq.com"`, `MQTT_PORT 8883`, `MQTT_TLS 1`. Đây là mặc định trong `config.example.h`.
+- **API chạy local:** `MQTT_HOST` là IP LAN của máy, `MQTT_PORT 1883`, `MQTT_TLS 0`.
+
 ## 5. Chạy
 
 Mọi lệnh đều chạy sau `conda activate iad`.
@@ -119,3 +123,5 @@ BOARD=esp32 ./flash.sh            # ESP32 DevKit thường
 Script tự cài core ESP32 và các thư viện nếu thiếu, tìm cổng USB, build, nạp firmware rồi mở Serial Monitor (Ctrl+C để thoát). Phải đóng Serial Monitor của Arduino IDE trước, vì hai chương trình không dùng chung được một cổng.
 
 Nếu không thấy cổng: dùng cáp USB có truyền dữ liệu, không phải cáp chỉ để sạc. Kiểm tra bằng `ls /dev/cu.usb*`. Nếu board không tự vào chế độ nạp, giữ nút **BOOT** khi bắt đầu upload.
+
+**Windows:** chạy `./flash.sh` trong **Git Bash** (terminal của VS Code chọn Git Bash). Script tự tìm cổng `COMx` của ESP32 (bỏ qua cổng Bluetooth). Kiểm tra cổng bằng `python -m serial.tools.list_ports -v`. Không thấy cổng thì cài driver USB-UART của board: **CP210x** (Silicon Labs) hoặc **CH340** (WCH). Chọn cổng thủ công: `PORT=COM3 ./flash.sh`.
