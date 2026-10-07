@@ -404,6 +404,7 @@ void setup() {
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setBufferSize(1024);
   mqtt.setKeepAlive(30);
+  mqtt.setSocketTimeout(25);  // the public broker can take ~20 s to answer CONNECT when busy
   mqtt.setCallback(onMessage);
   connectMqtt();
   Serial.println("Tap a card on the MFRC522, type a hex UID + Enter, or \"?\" + Enter for the status");

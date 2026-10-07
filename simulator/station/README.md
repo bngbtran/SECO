@@ -18,7 +18,7 @@ Trụ và API phải dùng **cùng một MQTT broker**. Chọn bằng `#define M
 
 | `MQTT_CLOUD` | Broker | Dùng với |
 |---|---|---|
-| **`1`** (mặc định) | `broker.hivemq.com:8883` (TLS) | API đã deploy trên Render (`https://seco-backend-api.onrender.com`) và web `https://iad-seco.vercel.app`. **Không cần chạy gì trên máy.** |
+| **`1`** (mặc định) | `broker.hivemq.com:1883` (không TLS, `MQTT_TLS 0`) | API đã deploy trên Render (`https://seco-backend-api.onrender.com`) và web `https://iad-seco.vercel.app`. **Không cần chạy gì trên máy.** Gateway của Wokwi không mở được TLS tới cổng 8883 (`MQTT connect failed, rc=-2`); `broker.hivemq.com` là một broker cho cả hai cổng nên API (8883) vẫn nhận đủ. |
 | `0` | Mosquitto trên máy qua `host.wokwi.internal:1883` | API chạy local (`cd apps/api && python -m app`) và `npm run dev:web` |
 
 1. Chọn `MQTT_CLOUD`, rồi `cd simulator/station && ./build.sh` để build firmware.
@@ -54,16 +54,16 @@ Relay đóng thì pin 9V cấp điện cho "xe" (LED **EV** sáng), và INA219 �
 | Linh kiện | ID | Chân | Chức năng |
 |---|---|---|---|
 | ESP32-S3 DevKitC-1 | `esp` | – | Bộ điều khiển trung tâm. Chạy firmware `sketch.ino`, kết nối WiFi `Wokwi-GUEST`, nói chuyện với API qua MQTT, đọc cảm biến, điều khiển relay, servo, đèn và màn hình. |
-| Breadboard half | `bb1` | – | Chia nguồn và nối bus. Rail **trên**: 3.3V (`tp`) và GND (`tn`) cho cảm biến, nút, màn TFT, INA219. Rail **dưới**: 5V (`bp`) và GND (`bn`) cho relay, servo, đèn LED. Cột 1 và 2 là bus I2C (SDA, SCL) dùng chung cho ESP và INA219; cột 6, 7, 8 là bus SPI (MOSI, SCK, MISO) dùng chung cho ESP, MFRC522 và màn TFT. Hàng LED cắm trực tiếp trên breadboard. Mỗi chân ESP chỉ có **một** dây. |
+| Breadboard half | `bb1` | – | Chia nguồn và nối bus. Rail **trên**: 3.3V (`tp`) và GND (`tn`) cho cảm biến, nút, màn TFT, INA219. Rail **dưới**: 5V (`bp`) và GND (`bn`) cho relay, servo, đèn RGB. Cột 1 và 2 là bus I2C (SDA, SCL) dùng chung cho ESP và INA219; cột 6, 7, 8 là bus SPI (MOSI, SCK, MISO) dùng chung cho ESP, MFRC522 và màn TFT. Mỗi chân ESP chỉ có **một** dây. |
 | Pin 9V | `battery` | BAT+ → relay COM, BAT− → GND | **Nguồn sạc**, tức nguồn năng lượng đổ vào xe. Đây là custom chip vì Wokwi không có pin. |
 
 ### Giao tiếp người dùng
 
 | Linh kiện | ID | Chân ESP | Chức năng |
 |---|---|---|---|
-| Màn TFT 2.8" ILI9341 (240x320, màu) | `tft` | CS 15, D/C 6, RST 21, MOSI 11, SCK 12, MISO 13 (SPI dùng chung với RFID qua breadboard cột 6–8), VCC/LED 3.3V | Màn hình của trụ, lớn nhất trong Wokwi. **Thanh tiêu đề đổi màu theo trạng thái**: xanh lá READY, xanh dương CHARGING, vàng chờ thanh toán, đỏ ERROR, cam bảo trì, xám offline. Bên dưới là dải trạng thái `PLUG · LOCK · nhiệt độ · MQTT`, rồi đến nội dung từng màn (xem mục *Màn hình*). Khi khách cần trả tiền, màn hiện **mã QR cỡ lớn**. Mỗi ô chữ có vị trí cố định và chỉ được vẽ lại khi nội dung đổi, nên không nháy và không đè chữ. |
+| Màn TFT 2.8" ILI9341 (240x320, màu) | `tft` | CS 15, D/C 6, RST 21, MOSI 11, SCK 12, MISO 13 (SPI dùng chung với RFID qua breadboard cột 6–8), VCC/LED 3.3V | Màn hình của trụ, lớn nhất trong Wokwi. **Thanh tiêu đề đổi màu theo trạng thái**: xanh lá READY, màu chủ đạo của web (#437066) CHARGING, vàng chờ thanh toán, đỏ ERROR, cam bảo trì, xám offline. Bên dưới là dải trạng thái `PLUG · LOCK · nhiệt độ · MQTT`, rồi đến nội dung từng màn (xem mục *Màn hình*). Khi khách cần trả tiền, màn hiện **mã QR cỡ lớn**. Mỗi ô chữ có vị trí cố định và chỉ được vẽ lại khi nội dung đổi, nên không nháy và không đè chữ. |
 | Đầu đọc RFID MFRC522 | `rfid` | SDA 10, MOSI 11, SCK 12, MISO 13, RST 14 | Đọc thẻ của **member** để bắt đầu sạc, hoặc thẻ của **kỹ thuật viên** để bảo trì. Bấm vào đầu đọc trong Wokwi để chọn thẻ rồi bấm *Tap*. |
-| Joystick | `joystick` | HORZ 1 (ADC), SEL 2 | Điều khiển duy nhất của khách hàng, đóng vai trò **nút START**. **Gạt trái / phải**: chọn ngân sách (ô **NGAN SACH** trên màn hình). Ở READY, các mức cho khách là Khong GH, 10.000, 20.000, 50.000, 100.000, 200.000, 500.000đ. Sau khi member quẹt thẻ, chỉ còn các mức **≤ số dư**: mức đặt trên app (nếu có), `Toi da` (sạc đến khi hết số dư), rồi các mức cố định. **Nhấn**: = **START** của khách; = **OK** của member (sạc ngay, không nhấn thì tự sạc sau 10 giây); khi QR hết hạn thì tạo QR mới. |
+| Joystick | `joystick` | HORZ 1 (ADC), SEL 2 | Điều khiển duy nhất của khách hàng, đóng vai trò **nút START**. **Gạt trái / phải**: chọn ngân sách (ô **NGAN SACH** trên màn hình). Ở màn hình chào, các mức cho khách là Khong GH, 10.000, 20.000, 50.000, 100.000, 200.000, 500.000đ. Sau khi member quẹt thẻ, chỉ còn các mức **≤ số dư**: `Toi da` (sạc đến khi hết số dư), rồi các mức cố định. **Nhấn**: = **START** của khách; = **OK** của member (bắt đầu sạc; trụ không tự sạc); khi QR hết hạn thì tạo QR mới. |
 | Nút STOP (đỏ) | `btnStop` | GPIO 7 | Dành cho **kỹ thuật viên**. Sau khi quẹt thẻ KTV, **giữ 3 giây** để vào hoặc ra bảo trì. Nhấn STOP mà không có thẻ KTV thì không có tác dụng (DD 3.3). |
 | Còi | `buzzer` | GPIO 18 | Phản hồi âm thanh: bíp ngắn khi quẹt thẻ hoặc nhấn nút, bíp cao khi thành công, bíp trầm và dài khi lỗi, quá nhiệt hoặc quá dòng. |
 
@@ -71,7 +71,7 @@ Relay đóng thì pin 9V cấp điện cho "xe" (LED **EV** sáng), và INA219 �
 
 | Linh kiện | ID | Chân ESP | Chức năng |
 |---|---|---|---|
-| Công tắc PLUG | `plug` | GPIO 5 | Mô phỏng **micro-switch ở đầu sạc**. Gạt sang **phải** = đã cắm sạc vào xe. Rút sạc khi đang sạc sẽ gửi event `UNPLUGGED`, API kết thúc phiên. |
+| Nút PLUG | `plug` | GPIO 5 | Mô phỏng **micro-switch ở đầu sạc**: nút nhấn, **mỗi lần nhấn = cắm sạc / rút sạc**. Rút sạc khi đang sạc sẽ gửi event `UNPLUGGED`, API kết thúc phiên. |
 | Cảm biến nhiệt DS18B20 | `temp` | GPIO 4 (1-Wire) | Đo nhiệt độ trụ mỗi giây. Kéo thanh nhiệt độ lên **≥ 35°C** thì relay ngắt, trụ gửi `OVER_TEMPERATURE` và chuyển sang ERROR. Nếu mất cảm biến thì gửi `SENSOR_FAULT`. Nhiệt độ cũng được gửi lên server trong telemetry. |
 | INA219 | `ina219` | SDA 8, SCL 9 (I2C 0x40), VIN+ / VIN− trên đường điện sạc | **Đo điện áp, dòng và công suất thật** trên đường pin → xe, gửi lên server mỗi 3 giây khi đang sạc. Đây là custom chip giả lập con INA219 thật: đủ các thanh ghi, shunt 0.1Ω, và firmware đọc bằng thư viện **Adafruit_INA219** như trên phần cứng. Hai thanh trượt: **điện áp pin** (mặc định 9V) và **dòng sạc** (mặc định 350 mA). **Bảo vệ quá dòng:** dòng > 1 A trong 0,5 giây thì relay ngắt và trụ báo sự cố. Chi phí vẫn tính theo thời gian theo DD (0,00125 kWh mỗi 30 giây). |
 
@@ -85,21 +85,17 @@ Relay đóng thì pin 9V cấp điện cho "xe" (LED **EV** sáng), và INA219 �
 
 ### Đèn trạng thái
 
-Năm LED cắm trên breadboard, mỗi LED có điện trở 220Ω xuống GND.
-- Bốn đèn READY, CHARGE, ERROR, MAINT ứng với **4 trạng thái của Station**. Tại một thời điểm chỉ một trong bốn đèn này sáng.
-- Đèn PAY báo **Session đang `WAITING_PAYMENT`**, có thể sáng cùng lúc với một đèn trạng thái trạm.
+Một **LED RGB** (common cathode): R → GPIO 41, G → GPIO 38, B → GPIO 39, chân chung → GND (trên mạch thật mỗi chân màu qua điện trở 220Ω). Màu của đèn là trạng thái của trạm:
 
-| Đèn | Chân | Sáng liên tục | Nhấp nháy |
-|---|---|---|---|
-| 🟢 READY | 38 | Station `READY` | Đang chờ `STATION_SYNC` sau khi kết nối |
-| 🔵 CHARGE | 39 | Station `CHARGING` | Đang gửi `SESSION_START` / `GUEST_START`, hoặc đang chờ server dừng phiên |
-| 🔴 ERROR | 41 | Station `ERROR` | **Mất kết nối** WiFi hoặc MQTT (trạm offline) |
-| 🟠 MAINT | 42 | Station `MAINTENANCE` | – |
-| 🟡 PAY | 40 | Session `WAITING_PAYMENT`, Payment `PENDING` | Payment `EXPIRED` hoặc `CANCELLED`, nhấn joystick để tạo QR mới |
+| Màu | Sáng liên tục | Nhấp nháy |
+|---|---|---|
+| 🟢 Xanh lá | Station `READY` | Đang chờ `STATION_SYNC` sau khi kết nối |
+| 🔵 Xanh dương | Station `CHARGING` | Đang gửi `SESSION_START` / `GUEST_START`, hoặc đang chờ server dừng phiên |
+| 🟡 Vàng | Session `WAITING_PAYMENT`, Payment `PENDING` | Payment `EXPIRED` hoặc `CANCELLED`, nhấn joystick để tạo QR mới |
+| 🔴 Đỏ | Station `ERROR` | **Mất kết nối** WiFi hoặc MQTT (trạm offline) |
+| 🟠 Cam | Station `MAINTENANCE` | – |
 
-Hai trường hợp thường gặp:
-- Khách rút sạc rồi chờ thanh toán: server vẫn để trạm `CHARGING` đến khi thanh toán xong, nên đèn 🔵 và 🟡 cùng sáng.
-- Khách đang sạc mà gặp sự cố (quá nhiệt / quá dòng): trạm `ERROR` và khách vẫn phải trả tiền, nên đèn 🔴 và 🟡 cùng sáng, màn hình vẫn hiện mã QR để khách thanh toán.
+Khách đang sạc mà gặp sự cố (quá nhiệt / quá dòng): trạm `ERROR` nhưng khách vẫn phải trả tiền, nên đèn đổi luân phiên **đỏ / vàng** và màn hình vẫn hiện mã QR.
 
 ## Trạng thái (theo bảng của DD)
 
@@ -162,17 +158,19 @@ Mặc định link trỏ tới `localhost`, nên chỉ mở được trên chín
 
 Có thể gõ UID vào Serial Monitor rồi Enter thay cho việc chạm thẻ, ví dụ `7E1C2A9F` là thẻ KTV thật của seed. Thẻ Key Fob cần chạy lại seed một lần sau khi pull: `cd apps/api && python -m app.db.seed`. Seed chỉ thêm thẻ, không đổi mật khẩu hay số dư.
 
+**Màn hình chào**: trạm READY hiện "Xin chao!". Quẹt thẻ thành viên thì trạm nhận diện **THÀNH VIÊN** (tên + số dư); không quẹt thẻ thì khách sạc với tư cách **KHÁCH**.
+
 **Member (DD 3.1: READY → quét RFID → tên + số dư → max budget (tùy chọn) → CHARGING)**
-1. Gạt **PLUG** sang phải (cắm sạc vào xe).
-2. Quẹt thẻ: trụ gửi `RFID_VERIFY`, màn hình hiện **tên** và **số dư**.
-3. (Tùy chọn) Gạt joystick chọn ngân sách. Chỉ có các mức **≤ số dư**; mức đã đặt trên app hiện đầu tiên nếu có. `Toi da` nghĩa là không đặt ngân sách: sạc đến khi hết số dư hoặc rút sạc.
-4. Nhấn joystick để sạc ngay, hoặc để yên **10 giây** thì trụ tự sạc. **Không cần START.** Trụ gửi `SESSION_START`, relay đóng, LED EV và đèn 🔵 sáng. Nếu chưa cắm sạc, trụ chờ tối đa 30 giây và sạc ngay khi cắm vào.
-5. Phiên dừng khi đạt ngân sách, không đủ số dư (server gửi `STOP`), rút sạc (gạt PLUG về trái), hoặc có sự cố an toàn. Server tính tiền thực tế và trừ ví; màn hình hiện **số tiền đã trừ** và **số dư còn lại**.
+1. Nhấn nút **PLUG** (cắm sạc vào xe).
+2. Quẹt thẻ: trụ gửi `RFID_VERIFY`, màn hình hiện **THÀNH VIÊN**, **tên** và **số dư**.
+3. (Tùy chọn) Gạt joystick chọn ngân sách. Chỉ có các mức **≤ số dư**. `Toi da` nghĩa là không đặt ngân sách: sạc đến khi hết số dư hoặc rút sạc.
+4. **Nhấn joystick để bắt đầu sạc** (trụ không tự sạc). Trụ gửi `SESSION_START`, relay đóng, LED EV sáng, đèn RGB xanh dương. Nếu chưa cắm sạc, trụ chờ tối đa 30 giây và sạc ngay khi nhấn PLUG. Để yên **60 giây** không thao tác thì trụ huỷ và quay về màn hình chào.
+5. Phiên dừng khi đạt ngân sách, không đủ số dư (server gửi `STOP`), rút sạc (nhấn PLUG lần nữa), hoặc có sự cố an toàn. Server tính tiền thực tế và trừ ví; màn hình hiện **số tiền đã trừ** và **số dư còn lại**.
 
 **Khách (sạc trước, trả QR sau)**
-1. (Tùy chọn) Ở READY, gạt joystick chọn ngân sách. Không cần thẻ RFID.
-2. Gạt PLUG sang phải, **nhấn joystick (START)**: trụ gửi `GUEST_START`, bắt đầu sạc.
-3. Gạt PLUG về trái: trụ gửi `UNPLUGGED`. Server gửi `STOP`, rồi `LOCK` (servo xoay 90°, đèn 🟡), rồi `PAYMENT_QR` (**QR cỡ lớn trên màn TFT**). Phiên phải dài **ít nhất 30 giây** mới có tiền và QR; ngắn hơn thì miễn phí.
+1. (Tùy chọn) Ở màn hình chào, gạt joystick chọn ngân sách. Không cần thẻ RFID.
+2. Nhấn PLUG, **nhấn joystick (START)**: trụ gửi `GUEST_START`, bắt đầu sạc.
+3. Nhấn PLUG lần nữa (rút sạc): trụ gửi `UNPLUGGED`. Server gửi `STOP`, rồi `LOCK` (servo xoay 90°, đèn vàng), rồi `PAYMENT_QR` (**QR cỡ lớn trên màn TFT**). Phiên phải dài **ít nhất 30 giây** mới có tiền và QR; ngắn hơn thì miễn phí.
 4. Quét QR (hoặc bấm link trong Serial Monitor), trên trang Sandbox bấm **Thanh toán**. Server gửi `UNLOCK`: servo mở, trụ về READY.
 5. Nếu QR hết hạn: đèn 🟡 nhấp nháy, nhấn joystick để lấy QR mới.
 

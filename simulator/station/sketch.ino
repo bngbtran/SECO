@@ -10,12 +10,12 @@
  *   DS18B20 temperature              wokwi-ds18b20
  *   Fail-safe relay (OFF at boot)    wokwi-relay-module: battery -> INA219 -> EV load
  *   EV (load being charged)          wokwi-led "EV"
- *   Plug micro-switch                wokwi-slide-switch "PLUG"
+ *   PLUG push button                 wokwi-pushbutton "PLUG" (each press = plug in / unplug)
  *   STOP button (technician)         wokwi-pushbutton
  *   Connector lock actuator          wokwi-servo
  *   Budget + START                   wokwi-analog-joystick (left/right = budget, press = START / OK)
  *   Buzzer                           wokwi-buzzer
- *   Status lights                    5 x wokwi-led: READY, CHARGING, ERROR, MAINTENANCE + PAYMENT
+ *   Status light                     wokwi-rgb-led (one RGB LED, colour = state)
  *
  * States (DD state table) - the firmware keeps the same values as the API:
  *   Station         READY | CHARGING | ERROR | MAINTENANCE
@@ -27,9 +27,10 @@
  * plus a local Step for what the screen shows while waiting for the API.
  *
  * Flows
- *   MEMBER  READY -> tap RFID -> name + balance -> budget <= balance on the joystick
- *           (optional; press = go, or it starts by itself after 10 s) -> CHARGING
- *           (no START) -> unplug / budget / balance / safety -> wallet charged.
+ *   MEMBER  READY (welcome) -> tap RFID -> MEMBER: name + balance -> budget <= balance
+ *           on the joystick (optional) -> press the joystick -> CHARGING
+ *           -> unplug / budget / balance / safety -> wallet charged. No input for
+ *           60 s: back to the welcome screen. Without a card the customer is a GUEST.
  *   GUEST   READY -> budget on the joystick (optional) -> plug -> START (press the
  *           joystick) -> CHARGING
  *           -> unplug -> LOCK -> QR on the TFT -> PAID -> UNLOCK -> READY.
@@ -78,14 +79,17 @@
 const char *WIFI_SSID = "Wokwi-GUEST";
 const char *WIFI_PASSWORD = "";
 
-// Broker. MQTT_CLOUD 1: broker.hivemq.com over TLS (8883), the broker of the
-// API deployed on Render (https://seco-backend-api.onrender.com). MQTT_CLOUD 0:
-// Mosquitto on your computer through the Wokwi gateway, for the API run locally
-// (`python -m app`). The station and the API must use the same broker.
+// Broker. MQTT_CLOUD 1: broker.hivemq.com, the broker of the API deployed on
+// Render (https://seco-backend-api.onrender.com). In Wokwi use the plain port
+// 1883 (MQTT_TLS 0): the Wokwi gateway does not open TLS to 8883 (rc=-2), and
+// broker.hivemq.com is one broker on both ports, so the API still gets every
+// message. MQTT_CLOUD 0: Mosquitto on your computer through the Wokwi gateway,
+// for the API run locally (`python -m app`). Station and API: same broker.
 #define MQTT_CLOUD 1
+#define MQTT_TLS 0  // 1 = broker.hivemq.com:8883 over TLS (real hardware on a normal network)
 #if MQTT_CLOUD
 const char *MQTT_HOST = "broker.hivemq.com";
-const uint16_t MQTT_PORT = 8883;
+const uint16_t MQTT_PORT = MQTT_TLS ? 8883 : 1883;
 #else
 const char *MQTT_HOST = "host.wokwi.internal";
 const uint16_t MQTT_PORT = 1883;
@@ -116,11 +120,7 @@ const uint8_t PIN_LOCK = 17;      // servo
 const uint8_t PIN_BUZZER = 18;
 const uint8_t PIN_JOY_HORZ = 1;   // ADC, max = left
 const uint8_t PIN_JOY_SEL = 2;    // LOW = joystick pressed = START / OK
-const uint8_t LED_READY = 38;     // green  - station READY
-const uint8_t LED_CHARGING = 39;  // blue   - station CHARGING
-const uint8_t LED_PAYMENT = 40;   // yellow - session WAITING_PAYMENT
-const uint8_t LED_ERROR = 41;     // red    - station ERROR (blinking = offline)
-const uint8_t LED_MAINT = 42;     // orange - station MAINTENANCE
+const uint8_t LED_R = 41, LED_G = 38, LED_B = 39;  // one RGB status LED, common cathode (see updateLeds)
 
 // Fixed budget levels (VND). 0 = no limit (member: app budget or whole balance).
 const long BUDGET_LEVELS[] = {0, 10000, 20000, 50000, 100000, 200000, 500000};
@@ -128,7 +128,7 @@ const int BUDGET_COUNT = sizeof(BUDGET_LEVELS) / sizeof(BUDGET_LEVELS[0]);
 
 // ---- Devices ---------------------------------------------------------------
 
-#if MQTT_CLOUD
+#if MQTT_CLOUD && MQTT_TLS
 WiFiClientSecure wifi;  // TLS
 #else
 WiFiClient wifi;
@@ -192,7 +192,7 @@ unsigned long memberWaitUntil = 0;
 long memberOptions[BUDGET_COUNT + 1];  // budgets <= balance (+ the one set in the app)
 int memberOptionCount = 0;
 int memberOption = 0;
-unsigned long memberDecideUntil = 0;   // starts by itself after this
+unsigned long memberDecideUntil = 0;   // no input until then: back to the welcome screen
 
 int guestBudget = 0;       // BUDGET_LEVELS index shown on the READY screen (0 = no limit)
 
@@ -210,7 +210,7 @@ unsigned long techUntil = 0;  // verified technician may hold STOP until then
 
 bool relayOn = false;
 bool plugged = false;
-float temperatureC = 25.0f;
+float temperatureC = 35.0f;
 bool sensorOk = true;
 
 bool inaOk = false;        // INA219 found on the I2C bus
@@ -383,33 +383,43 @@ void setLock(LockStatus status) {
 }
 
 /**
- * Status lights. One light for the station status (READY / CHARGING / ERROR /
- * MAINTENANCE) and the PAYMENT light for a session WAITING_PAYMENT.
- * Blinking: CHARGING = starting / stopping, PAYMENT = QR EXPIRED / CANCELLED,
- * ERROR = offline (no WiFi / MQTT), READY = syncing with the API.
+ * One RGB status light (common cathode):
+ *   green   READY                     blue    CHARGING (blinking = starting / stopping)
+ *   yellow  WAITING_PAYMENT (blinking = QR expired / cancelled)
+ *   red     ERROR (blinking = offline: no WiFi / MQTT)
+ *   orange  MAINTENANCE               green blinking = syncing with the API at boot
  */
+void setRgb(uint8_t r, uint8_t g, uint8_t b) {
+  static int32_t last = -1;
+  int32_t packed = (int32_t)r << 16 | g << 8 | b;
+  if (packed == last) return;  // analogWrite only on change
+  last = packed;
+  analogWrite(LED_R, r);
+  analogWrite(LED_G, g);
+  analogWrite(LED_B, b);
+}
+
 void updateLeds() {
   bool blink = (millis() / 400) % 2;
-  bool ready = false, charging = false, error = false, maint = false;
-  bool pay = session == SessionStatus::WaitingPayment && (paymentRetryable() ? blink : true);
+  uint32_t color = 0;  // 0xRRGGBB
+  const uint32_t GREEN = 0x00FF00, BLUE = 0x0000FF, YELLOW = 0xFFA000, RED = 0xFF0000, ORANGE = 0xFF3C00;
   if (!online()) {
-    error = blink;
-    pay = false;
+    color = blink ? RED : 0;
   } else if (step == Step::Boot) {
-    ready = blink;
+    color = blink ? GREEN : 0;
+  } else if (session == SessionStatus::WaitingPayment) {
+    // A guest still pays when the station is in ERROR: alternate red / yellow.
+    if (station == StationStatus::Error) color = blink ? RED : YELLOW;
+    else color = paymentRetryable() && !blink ? 0 : YELLOW;
   } else {
     switch (station) {
-      case StationStatus::Ready: ready = step == Step::Starting ? false : true; charging = step == Step::Starting && blink; break;
-      case StationStatus::Charging: charging = step == Step::Stopping ? blink : true; break;
-      case StationStatus::Error: error = true; break;
-      case StationStatus::Maintenance: maint = true; break;
+      case StationStatus::Ready: color = step == Step::Starting ? (blink ? BLUE : 0) : GREEN; break;
+      case StationStatus::Charging: color = step == Step::Stopping && !blink ? 0 : BLUE; break;
+      case StationStatus::Error: color = RED; break;
+      case StationStatus::Maintenance: color = ORANGE; break;
     }
   }
-  digitalWrite(LED_READY, ready);
-  digitalWrite(LED_CHARGING, charging);
-  digitalWrite(LED_PAYMENT, pay);
-  digitalWrite(LED_ERROR, error);
-  digitalWrite(LED_MAINT, maint);
+  setRgb(color >> 16, (color >> 8) & 0xFF, color & 0xFF);
 }
 
 // ---- TFT 240x320 -----------------------------------------------------------
@@ -424,8 +434,11 @@ void updateLeds() {
 constexpr uint16_t rgb(uint8_t r, uint8_t g, uint8_t b) { return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3); }
 const uint16_t C_BG = rgb(11, 17, 32), C_CARD = rgb(30, 41, 59), C_LINE = rgb(51, 65, 85);
 const uint16_t C_TEXT = rgb(241, 245, 249), C_MUTED = rgb(148, 163, 184), C_DIM = rgb(71, 85, 105);
-const uint16_t C_GREEN = rgb(34, 197, 94), C_BLUE = rgb(59, 130, 246), C_AMBER = rgb(245, 158, 11);
-const uint16_t C_RED = rgb(239, 68, 68), C_ORANGE = rgb(249, 115, 22), C_CYAN = rgb(34, 211, 238);
+const uint16_t C_GREEN = rgb(34, 197, 94), C_AMBER = rgb(245, 158, 11);
+const uint16_t C_RED = rgb(239, 68, 68), C_ORANGE = rgb(249, 115, 22);
+// Web admin primary colour #437066 (fills, header, bars) and a lighter tint of
+// it for text on the dark background (#7fb3a6), instead of blue / cyan.
+const uint16_t C_BRAND = rgb(67, 112, 102), C_BRAND_TEXT = rgb(127, 179, 166);
 const int16_t W = 240, H = 320;
 
 // Fonts from large to small; nullptr = built-in 6x8 font.
@@ -492,7 +505,7 @@ uint16_t statusColor() {
   if (session == SessionStatus::WaitingPayment && station != StationStatus::Error) return C_AMBER;
   switch (station) {
     case StationStatus::Ready: return C_GREEN;
-    case StationStatus::Charging: return C_BLUE;
+    case StationStatus::Charging: return C_BRAND;
     case StationStatus::Error: return C_RED;
     case StationStatus::Maintenance: return C_ORANGE;
   }
@@ -559,7 +572,7 @@ void drawIcon(Icon icon, int16_t cx, int16_t cy, uint16_t color) {
 }
 
 uint16_t iconColor(Icon icon) {
-  return icon == Icon::Ok ? C_GREEN : icon == Icon::Error ? C_RED : icon == Icon::Info ? C_AMBER : C_CYAN;
+  return icon == Icon::Ok ? C_GREEN : icon == Icon::Error ? C_RED : icon == Icon::Info ? C_AMBER : C_BRAND_TEXT;
 }
 
 /** Icon + title + detail + two hint lines, centred (notices, errors, maintenance). */
@@ -579,8 +592,8 @@ void drawCard(const String &key, Icon icon, const String &title, const String &d
 void drawBudgetCard(bool fresh, int16_t top, const String &caption, const String &value) {
   if (fresh) {
     card(10, top, W - 20, 80);
-    tft.fillTriangle(22, top + 52, 34, top + 42, 34, top + 62, C_CYAN);
-    tft.fillTriangle(W - 22, top + 52, W - 34, top + 42, W - 34, top + 62, C_CYAN);
+    tft.fillTriangle(22, top + 52, 34, top + 42, 34, top + 62, C_BRAND_TEXT);
+    tft.fillTriangle(W - 22, top + 52, W - 34, top + 42, W - 34, top + 62, C_BRAND_TEXT);
   }
   text(20, 20, top + 6, W - 40, 22, caption, F_S, C_MUTED, Align::Center, C_CARD);
   text(21, 40, top + 32, W - 80, 40, value, F_L, C_TEXT, Align::Center, C_CARD);
@@ -589,48 +602,45 @@ void drawBudgetCard(bool fresh, int16_t top, const String &caption, const String
 void drawConnecting() {
   beginScreen("connecting", C_DIM);
   drawHeader();
-  text(10, 0, 96, W, 60, "SECO", F_XL, C_CYAN);
+  text(10, 0, 96, W, 60, "SECO", F_XL, C_BRAND_TEXT);
   text(11, 0, 158, W, 24, String("Tram sac ") + STATION_ID, F_S, C_MUTED);
   text(12, 0, 186, W, 26,
        WiFi.status() != WL_CONNECTED ? "Ket noi WiFi..." : !mqtt.connected() ? "Ket noi may chu..." : "Dong bo trang thai...",
        F_B, C_TEXT);
-  drawSpinner(30, W / 2, 262, C_CYAN);
+  drawSpinner(30, W / 2, 262, C_BRAND_TEXT);
 }
 
+/** Welcome: a member taps the card; without a card the customer charges as a GUEST. */
 void drawReady() {
   bool fresh = beginScreen("ready", statusColor());
   drawHeader();
-  text(10, 0, 74, W, 44, "San sang", F_L, C_GREEN);
-  text(11, 0, 118, W, 22, plugged ? "Da cam sac vao xe" : "Hay cam sac vao xe", F_S, C_MUTED);
-  drawBudgetCard(fresh, 148, "NGAN SACH", budgetLabel(BUDGET_LEVELS[guestBudget], "Khong gioi han"));
-  text(12, 8, 238, W - 16, 24, "Khach: bam joy = START", F_S, plugged ? C_TEXT : C_DIM);
-  text(13, 8, 262, W - 16, 24, "Member: quet the RFID", F_S, C_TEXT);
-  text(14, 8, 292, W - 16, 22, "Gia 4.000d / kWh", F_S, C_MUTED);
+  text(10, 0, 72, W, 40, "Xin chao!", F_L, C_BRAND_TEXT);
+  text(11, 8, 112, W - 16, 22, "Thanh vien: quet the RFID", F_B, C_TEXT);
+  text(16, 8, 134, W - 16, 18, "hoac sac voi tu cach KHACH", F_S, C_MUTED);
+  drawBudgetCard(fresh, 158, "KHACH - NGAN SACH", budgetLabel(BUDGET_LEVELS[guestBudget], "Khong gioi han"));
+  text(12, 8, 244, W - 16, 22, plugged ? "Khach: bam joystick = START" : "Khach: nhan PLUG roi bam joy", F_S,
+       plugged ? C_TEXT : C_MUTED);
+  text(13, 8, 268, W - 16, 22, plugged ? "Da cam sac (PLUG)" : "Chua cam sac", F_S, plugged ? C_GREEN : C_DIM);
+  text(14, 8, 294, W - 16, 22, "Gia 4.000d / kWh", F_S, C_MUTED);
 }
 
+/** Member identified by the card: name, balance, budget; the member presses to start. */
 void drawMemberBudget() {
   bool fresh = beginScreen("member:" + memberName, statusColor());
   drawHeader();
   long left = max(0L, (long)(memberDecideUntil - millis()));
-  text(10, 0, 72, W, 22, "Xin chao", F_S, C_MUTED);
-  text(11, 8, 94, W - 16, 34, memberName, F_M, C_TEXT);
-  text(12, 0, 128, W, 24, "So du " + vnd(memberBalance), F_B, C_GREEN);
-  drawBudgetCard(fresh, 158, "NGAN SACH (<= so du)", budgetLabel(memberOptions[memberOption], "Toi da"));
-  text(13, 0, 246, W, 22, "Nhan joystick de sac ngay", F_S, C_MUTED);
-  text(14, 0, 268, W, 24, "Tu sac sau " + String((left + 999) / 1000) + " giay", F_B, C_AMBER);
-  int16_t fill = (int16_t)((long)(W - 24) * left / 10000);
-  String bar = String(fill);
-  if (slotCache[15] != bar) {
-    slotCache[15] = bar;
-    tft.fillRoundRect(12, 300, W - 24, 8, 4, C_CARD);
-    if (fill > 4) tft.fillRoundRect(12, 300, fill, 8, 4, C_AMBER);
-  }
+  text(10, 0, 70, W, 22, "THANH VIEN", F_B, C_BRAND_TEXT);
+  text(11, 8, 92, W - 16, 34, memberName, F_M, C_TEXT);
+  text(12, 0, 126, W, 24, "So du " + vnd(memberBalance), F_B, C_GREEN);
+  drawBudgetCard(fresh, 156, "NGAN SACH (<= so du)", budgetLabel(memberOptions[memberOption], "Toi da"));
+  text(13, 0, 242, W, 24, plugged ? "Bam joystick de bat dau sac" : "Nhan PLUG, roi bam joystick", F_B, C_TEXT);
+  text(14, 0, 270, W, 22, "Tu huy sau " + String((left + 999) / 1000) + " giay", F_S, C_MUTED);
 }
 
 void drawWaitPlug() {
   long left = max(0L, (long)(memberWaitUntil - millis())) / 1000;
-  drawCard("waitplug", Icon::Info, memberName, "Cam sac vao xe", "de bat dau sac", "Con " + String(left) + " giay",
-           C_CYAN);
+  drawCard("waitplug", Icon::Info, memberName, "Nhan nut PLUG", "de cam sac va sac", "Con " + String(left) + " giay",
+           C_BRAND_TEXT);
 }
 
 void drawCharging() {
@@ -639,7 +649,7 @@ void drawCharging() {
   unsigned long secs = sessionStartedAt ? (millis() - sessionStartedAt) / 1000 : 0;
   char elapsed[12];
   snprintf(elapsed, sizeof(elapsed), "%02lu:%02lu", secs / 60, secs % 60);
-  text(10, 10, 70, 150, 24, sessionType == "GUEST" ? "KHACH VANG LAI" : "MEMBER", F_B, C_BLUE, Align::Left);
+  text(10, 10, 70, 150, 24, sessionType == "GUEST" ? "KHACH" : "THANH VIEN", F_B, C_BRAND_TEXT, Align::Left);
   text(11, 160, 70, 70, 24, elapsed, F_B, C_TEXT, Align::Right);
   text(12, 0, 98, W, 54, String(sessionEnergy(), 5), F_XL, C_TEXT);
   text(13, 0, 152, W, 20, "kWh", F_S, C_MUTED);
@@ -653,7 +663,7 @@ void drawCharging() {
     if (slotCache[16] != bar) {
       slotCache[16] = bar;
       tft.fillRoundRect(20, 244, W - 40, 8, 4, C_LINE);
-      if (fill > 4) tft.fillRoundRect(20, 244, fill, 8, 4, C_BLUE);
+      if (fill > 4) tft.fillRoundRect(20, 244, fill, 8, 4, C_BRAND);
     }
     text(17, 20, 252, W - 40, 16, "/ " + vnd(sessionBudget), F_S, C_MUTED, Align::Right, C_CARD);
   } else {
@@ -674,13 +684,19 @@ void drawCharging() {
 /** QR (sandbox payment link) as large as fits, the amount under it. */
 void drawPayment() {
   if (beginScreen("pay:" + paymentId, statusColor())) {
-    uint8_t scale = max(1, min(196 / (qr.size + 4), 6));
-    int16_t side = qr.size * scale, quiet = 2 * scale;
-    int16_t x0 = (W - side) / 2, y0 = 98 + quiet;
-    tft.fillRoundRect(x0 - quiet, 98, side + 2 * quiet, side + 2 * quiet, 6, ILI9341_WHITE);
+    // Phone cameras need the 4-module white quiet zone of the QR standard (also at
+    // the corners: a square box, not a rounded one) and modules as large as fit
+    // between the title (ends at y 96) and the amount (starts at y 286).
+    const int quiet = 4, top = 96, room = 190;
+    int span = qr.size + 2 * quiet;
+    uint8_t scale = max(1, min((W - 8) / span, room / span));
+    int16_t box = span * scale;
+    int16_t bx = (W - box) / 2, by = top + (room - box) / 2;
+    tft.fillRect(bx, by, box, box, ILI9341_WHITE);
     for (uint8_t y = 0; y < qr.size; y++)
       for (uint8_t x = 0; x < qr.size; x++)
-        if (qrcode_getModule(&qr, x, y)) tft.fillRect(x0 + x * scale, y0 + y * scale, scale, scale, ILI9341_BLACK);
+        if (qrcode_getModule(&qr, x, y))
+          tft.fillRect(bx + (quiet + x) * scale, by + (quiet + y) * scale, scale, scale, ILI9341_BLACK);
   }
   drawHeader();
   text(10, 0, 70, W, 26, "Quet ma QR de thanh toan", F_B, C_TEXT);
@@ -760,12 +776,19 @@ void notify(Icon icon, const String &title, const String &detail, const String &
 }
 
 void setQr(const String &payload) {
+  // QRCodeGenerator does not check the capacity: too long a text for the version
+  // still returns 0 and gives a corrupt code no phone can read (the payment link,
+  // 68 characters, does not fit version 3). So pick the smallest version whose
+  // data capacity (QR spec, ECC LOW, versions 1..6) holds the text in byte mode:
+  // 4-bit mode + 8-bit length + 8 bits per character = length + 2 codewords.
+  static const uint8_t DATA_CODEWORDS_LOW[] = {19, 34, 55, 80, 108, 136};
   qrReady = false;
-  for (uint8_t version = 3; version <= 6 && !qrReady; version++) {
-    if (qrcode_getBufferSize(version) <= sizeof(qrModules)) {
-      qrReady = qrcode_initText(&qr, qrModules, version, ECC_LOW, payload.c_str()) == 0;
-    }
+  for (uint8_t version = 1; version <= 6 && !qrReady; version++) {
+    if (DATA_CODEWORDS_LOW[version - 1] < payload.length() + 2) continue;
+    if (qrcode_getBufferSize(version) > sizeof(qrModules)) break;
+    qrReady = qrcode_initText(&qr, qrModules, version, ECC_LOW, payload.c_str()) == 0;
   }
+  if (!qrReady) Serial.printf("[QR] link too long for the screen QR (%u chars)\r\n", payload.length());
   screenKey = "";  // a new QR: redraw the payment screen
   // The same link as the QR, clickable from the Serial Monitor.
   Serial.printf("[QR] Thanh toan %s: %s\r\n", vnd(paymentAmount).c_str(), payload.c_str());
@@ -978,7 +1001,7 @@ void onCommand(JsonDocument &doc) {
 
 // ---- Replies from the API --------------------------------------------------
 
-/** Member budget chosen (joystick press or 10 s without input): charge now or on plug-in. */
+/** Member budget chosen (joystick press): charge now, or once the cable is plugged in. */
 void confirmMemberBudget() {
   memberBudget = memberOptions[memberOption];
   if (plugged) {
@@ -1095,7 +1118,7 @@ void onResponse(JsonDocument &doc) {
         if (BUDGET_LEVELS[i] <= memberBalance && BUDGET_LEVELS[i] != appBudget) memberOptions[memberOptionCount++] = BUDGET_LEVELS[i];
       }
       memberOption = 0;
-      memberDecideUntil = millis() + 10000;
+      memberDecideUntil = millis() + 60000;
       beep(2400, 80);
       messageUntil = 0;
       step = Step::MemberBudget;
@@ -1302,7 +1325,7 @@ void readJoystick() {
   if (step == Step::MemberBudget) {
     if (moved) {
       memberOption = (memberOption + dir + memberOptionCount) % memberOptionCount;
-      memberDecideUntil = millis() + 10000;
+      memberDecideUntil = millis() + 60000;
       beep(2600, 20);
     }
     messageUntil = 0;
@@ -1334,7 +1357,7 @@ void readJoystick() {
   if (clicked) {  // START (guest, DD 3.2)
     beep(2200, 40);
     if (!plugged) {
-      notify(Icon::Info, "Chua cam sac", "Cam sac roi bam");
+      notify(Icon::Info, "Chua cam sac", "Nhan PLUG roi bam");
       return;
     }
     JsonDocument doc;
@@ -1348,36 +1371,35 @@ void readJoystick() {
   }
 }
 
-/** A switch input that must stay at the new level for 50 ms before it counts. */
-bool settled(uint8_t pin, bool current, unsigned long &since) {
-  bool now = digitalRead(pin) == LOW;
-  if (now == current) {
-    since = 0;
-    return current;
-  }
-  if (!since) since = millis();
-  return millis() - since >= 50 ? now : current;
-}
-
 void readSwitches() {
-  static unsigned long plugSince = 0;
-  bool nowPlugged = settled(PIN_PLUG, plugged, plugSince);
-  if (nowPlugged != plugged) {
-    plugged = nowPlugged;
-    Serial.printf("[switch] PLUG %s\r\n", plugged ? "cam (phai)" : "rut (trai)");
-    if (online()) sendEvent(plugged ? "PLUG" : "UNPLUGGED");
-    if (!plugged) {
-      setRelay(false);
-      if (session == SessionStatus::Active && step != Step::Stopping) {
-        // The API stops the session (reason UNPLUG) and replies with STOP
-        // (+ LOCK / PAYMENT_QR for a guest).
-        step = Step::Stopping;
-        stopReason = "UNPLUG";
-        stoppingSince = millis();
-      }
-    } else if (step == Step::WaitPlug) {
-      startMemberSession();
+  // PLUG is a push button: each press toggles plugged / unplugged (stands for
+  // the micro-switch in the connector).
+  static bool rawDown = false, stableDown = false;
+  static unsigned long changedAt = 0;
+  bool down = digitalRead(PIN_PLUG) == LOW;
+  if (down != rawDown) {
+    rawDown = down;
+    changedAt = millis();
+  }
+  if (millis() - changedAt < 30 || down == stableDown) return;
+  stableDown = down;
+  if (!stableDown) return;  // act on the press, not the release
+
+  plugged = !plugged;
+  beep(plugged ? 2200 : 1200, 60);
+  Serial.printf("[plug] %s\r\n", plugged ? "DA CAM" : "DA RUT");
+  if (online()) sendEvent(plugged ? "PLUG" : "UNPLUGGED");
+  if (!plugged) {
+    setRelay(false);
+    if (session == SessionStatus::Active && step != Step::Stopping) {
+      // The API stops the session (reason UNPLUG) and replies with STOP
+      // (+ LOCK / PAYMENT_QR for a guest).
+      step = Step::Stopping;
+      stopReason = "UNPLUG";
+      stoppingSince = millis();
     }
+  } else if (step == Step::WaitPlug) {
+    startMemberSession();
   }
 }
 
@@ -1469,7 +1491,7 @@ void setup() {
   Serial.begin(115200);
   Serial.printf("\n[boot] SECO %s %s\r\n", STATION_ID, FIRMWARE);
   for (uint8_t pin : {PIN_PLUG, PIN_STOP, PIN_JOY_SEL}) pinMode(pin, INPUT_PULLUP);
-  for (uint8_t pin : {PIN_BUZZER, LED_READY, LED_CHARGING, LED_PAYMENT, LED_ERROR, LED_MAINT}) pinMode(pin, OUTPUT);
+  for (uint8_t pin : {PIN_BUZZER, LED_R, LED_G, LED_B}) pinMode(pin, OUTPUT);
   analogReadResolution(12);
 
   // I2C bus: list every device that answers (expected 0x40 INA219).
@@ -1505,8 +1527,8 @@ void setup() {
 
   ledcAttach(PIN_LOCK, 50, 14);  // servo PWM; position stays UNKNOWN until STATION_SYNC
 
-  plugged = digitalRead(PIN_PLUG) == LOW;
-  Serial.printf("[boot] plug=%d\r\n", plugged);
+  // PLUG is a push button: the cable starts unplugged; press it to plug in.
+  plugged = false;
   render();
 
   Serial.print("[boot] WiFi");
@@ -1527,7 +1549,7 @@ void setup() {
   }
   Serial.printf(" connected, IP %s\r\n", WiFi.localIP().toString().c_str());
 
-#if MQTT_CLOUD
+#if MQTT_CLOUD && MQTT_TLS
   // Encrypted but not authenticated: fine for the demo broker. Pin the CA
   // (wifi.setCACert) for a private broker.
   wifi.setInsecure();
@@ -1535,6 +1557,7 @@ void setup() {
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setBufferSize(2048);
   mqtt.setKeepAlive(30);
+  mqtt.setSocketTimeout(25);  // the public broker can take ~20 s to answer CONNECT when busy
   mqtt.setCallback(onMessage);
   connectMqtt();
 }
@@ -1556,7 +1579,11 @@ void loop() {
   readCard();
   readSerial();
 
-  if (step == Step::MemberBudget && millis() > memberDecideUntil) confirmMemberBudget();
+  if (step == Step::MemberBudget && millis() > memberDecideUntil) {  // nobody pressed: cancel
+    step = Step::Idle;
+    memberUid = "";
+    notify(Icon::Info, "Het thoi gian", "Quet the lai de sac");
+  }
   if (step == Step::WaitPlug && millis() > memberWaitUntil) {
     step = Step::Idle;
     memberUid = "";

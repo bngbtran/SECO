@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "author": "SECO team - ILI9341 test",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-s3-devkitc-1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-ili9341", "id": "tft", "top": -250, "left": 200, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "tft:VCC", "esp:3V3.1", "red", [] ],
+    [ "tft:GND", "esp:GND.1", "black", [] ],
+    [ "tft:CS", "esp:15", "orange", [] ],
+    [ "tft:RST", "esp:17", "purple", [] ],
+    [ "tft:D/C", "esp:16", "cyan", [] ],
+    [ "tft:MOSI", "esp:11", "green", [] ],
+    [ "tft:SCK", "esp:12", "violet", [] ],
+    [ "tft:LED", "esp:18", "yellow", [] ],
+    [ "tft:MISO", "esp:13", "gray", [] ]
+  ],
+  "dependencies": {}
+}

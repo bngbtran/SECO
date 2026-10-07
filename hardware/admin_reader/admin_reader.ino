@@ -550,6 +550,18 @@ void setup() {
 
   if (OLED_ENABLED) {
     Wire.begin(I2C_SDA, I2C_SCL);
+    // oled.begin() does not check that the screen answers: scan the bus so the log
+    // shows whether the OLED is wired and at which address (0x3C or 0x3D).
+    Serial.printf("I2C scan (SDA=%u SCL=%u):", I2C_SDA, I2C_SCL);
+    uint8_t found = 0;
+    for (uint8_t address = 1; address < 127; address++) {
+      Wire.beginTransmission(address);
+      if (Wire.endTransmission() == 0) {
+        Serial.printf(" 0x%02X", address);
+        found++;
+      }
+    }
+    Serial.println(found ? "" : " nothing (check VCC / GND / SDA / SCL wiring)");
     Wire.setClock(400000);  // full frame in ~25 ms
     if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
       Serial.printf("OLED not found at 0x%02X (check SDA=%u SCL=%u, try 0x3D)\n", OLED_ADDRESS, I2C_SDA, I2C_SCL);
@@ -567,6 +579,7 @@ void setup() {
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setBufferSize(1024);
   mqtt.setKeepAlive(30);
+  mqtt.setSocketTimeout(25);  // the public broker can take ~20 s to answer CONNECT when busy
   mqtt.setCallback(onMessage);
   connectMqtt();
   Serial.println("Tap a card on the MFRC522 or type a hex UID + Enter");
