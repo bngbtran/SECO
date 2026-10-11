@@ -149,9 +149,20 @@ async def handle_station_sync(station_id: str, payload: dict[str, Any]) -> dict[
                     )
                 },
                 **session_live_fields(session),
+                **_measured_energy(session),
             }
             if session
             else None
         ),
         "payment": payment,
+    }
+
+
+def _measured_energy(session: dict) -> dict[str, Any]:
+    """Energy the station measured and the API recorded: it resumes counting from it."""
+    if not session.get("metered"):
+        return {}
+    return {
+        "energy_kwh_sim": session.get("metered_energy_kwh"),
+        "energy_kwh_raw": session.get("metered_energy_kwh_raw"),
     }
