@@ -1,0 +1,15 @@
+# Wokwi for VS Code: build first (see README), then "Wokwi: Start Simulator".
+# Same wiring as the real station EVCS-01 (servo on GPIO 45, PLUG push button).
+[wokwi]
+version = 1
+firmware = "build/station.ino.merged.bin"
+elf = "build/station.ino.elf"
+
+# Custom chips: the INA219 and the 9V battery do not exist in the Wokwi part library.
+[[chip]]
+name = "ina219"
+binary = "chips/ina219.chip.wasm"
+
+[[chip]]
+name = "battery-9v"
+binary = "chips/battery-9v.chip.wasm"

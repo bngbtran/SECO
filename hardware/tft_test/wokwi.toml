@@ -1,0 +1,6 @@
+# Wokwi for VS Code: build first, then "Wokwi: Start Simulator".
+#   arduino-cli compile --fqbn esp32:esp32:esp32s3 --output-dir build .
+[wokwi]
+version = 1
+firmware = "build/tft_test.ino.merged.bin"
+elf = "build/tft_test.ino.elf"

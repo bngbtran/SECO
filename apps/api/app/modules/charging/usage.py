@@ -1,12 +1,18 @@
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+
+from bson.decimal128 import Decimal128
 
 from app.core.config import get_settings
 from app.core.mongo_types import from_decimal128
+from app.db.mongodb import get_collection
 from app.modules.billing.service import cost_for_energy, energy_for_seconds
+from app.modules.charging.constants import SessionStatus
 from app.modules.charging.service import set_session_usage
 
 settings = get_settings()
+
+sessions = get_collection("charging_sessions")
 
 
 def now_utc() -> datetime:
@@ -26,15 +32,81 @@ def serialize_session(session: dict) -> dict:
     return result
 
 
-async def refresh_session_usage(session: dict) -> tuple[dict, bool]:
-    """Recompute usage of an ACTIVE session (member or guest) from elapsed time.
+def _meter_value(value) -> Decimal | None:
+    try:
+        energy = Decimal(str(value))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    return energy if energy.is_finite() and energy >= 0 else None
 
-    Energy is simulated (DD 5): 0.15 kW every 30 s tick, so usage depends only on
-    how many whole ticks have passed since the session started. This keeps the
-    update idempotent no matter how often telemetry or the ticker call it.
-    Returns the (possibly updated) session and whether the next tick would
-    exceed the budget.
+
+async def record_station_meter(station_id: str, data: dict) -> bool:
+    """Store the energy the station measured (INA219) on its ACTIVE session.
+
+    The station sends energy_kwh_sim (its measured energy x the demo multiplier)
+    with every telemetry and event of an open session. From then on the session
+    is billed from that energy instead of elapsed time. Only the session the
+    station names, and only increases ($max): a late or repeated message can
+    never lower the energy.
     """
+    session_id = data.get("session_id")
+    energy = _meter_value(data.get("energy_kwh_sim"))
+    if not session_id or energy is None:
+        return False
+
+    update = {"metered_energy_kwh": Decimal128(str(energy))}
+    raw = _meter_value(data.get("energy_kwh_raw"))
+    if raw is not None:
+        update["metered_energy_kwh_raw"] = Decimal128(str(raw))
+
+    result = await sessions.update_one(
+        {
+            "session_id": str(session_id),
+            "station_id": station_id,
+            "status": SessionStatus.ACTIVE.value,
+        },
+        {"$max": update, "$set": {"metered": True, "updated_at": now_utc()}},
+    )
+    return result.matched_count == 1
+
+
+async def _refresh_metered_usage(session: dict) -> tuple[dict, bool]:
+    """Usage of a session billed from the station's measured energy."""
+    price = int(session.get("price_per_kwh_vnd", settings.price_per_kwh_vnd))
+    energy_kwh = from_decimal128(session.get("metered_energy_kwh", Decimal(0)))
+    cost_vnd = cost_for_energy(energy_kwh, price)
+
+    budget = session.get("max_budget_vnd")
+    if budget is not None:
+        # Telemetry arrives every few seconds: never bill more than the budget.
+        cost_vnd = min(cost_vnd, int(budget))
+
+    current_energy = from_decimal128(session.get("energy_kwh", Decimal(0)))
+    if energy_kwh > current_energy:
+        updated = await set_session_usage(
+            session_id=session["session_id"],
+            energy_kwh=energy_kwh,
+            cost_vnd=cost_vnd,
+        )
+        session = updated or session
+
+    budget_exhausted = budget is not None and cost_vnd >= int(budget)
+    return session, budget_exhausted
+
+
+async def refresh_session_usage(session: dict) -> tuple[dict, bool]:
+    """Recompute usage of an ACTIVE session (member or guest).
+
+    A station that measures energy (record_station_meter) is billed from it:
+    cost = energy_kwh_sim x the session price. Otherwise energy is simulated
+    (DD 5): 0.15 kW every 30 s tick, so usage depends only on how many whole
+    ticks have passed since the session started. Both keep the update
+    idempotent no matter how often telemetry or the ticker call it.
+    Returns the (possibly updated) session and whether the budget is used up.
+    """
+    if session.get("metered"):
+        return await _refresh_metered_usage(session)
+
     tick_seconds = settings.energy_tick_seconds
     price = int(session.get("price_per_kwh_vnd", settings.price_per_kwh_vnd))
     power_kw = from_decimal128(session.get("power_kw", settings.energy_power_kw_decimal))

@@ -86,12 +86,13 @@
       "attrs": {}
     },
     {
-      "type": "wokwi-slide-switch",
+      "type": "wokwi-pushbutton",
       "id": "plug",
       "top": 330,
       "left": -170,
       "attrs": {
-        "value": "",
+        "color": "green",
+        "label": "PLUG",
         "bounce": "0"
       }
     },
@@ -113,106 +114,6 @@
       "left": 40,
       "attrs": {
         "volume": "0.2"
-      }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "ledReady",
-      "top": 129,
-      "left": 239.4,
-      "attrs": {
-        "color": "green",
-        "label": "READY"
-      }
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "r_ledReady",
-      "top": 204.6,
-      "left": 225.45,
-      "rotate": 90,
-      "attrs": {
-        "value": "220"
-      }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "ledCharging",
-      "top": 129,
-      "left": 287.4,
-      "attrs": {
-        "color": "blue",
-        "label": "CHARGE"
-      }
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "r_ledCharging",
-      "top": 204.6,
-      "left": 273.45,
-      "rotate": 90,
-      "attrs": {
-        "value": "220"
-      }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "ledPayment",
-      "top": 129,
-      "left": 335.4,
-      "attrs": {
-        "color": "yellow",
-        "label": "PAY"
-      }
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "r_ledPayment",
-      "top": 204.6,
-      "left": 321.45,
-      "rotate": 90,
-      "attrs": {
-        "value": "220"
-      }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "ledError",
-      "top": 129,
-      "left": 383.4,
-      "attrs": {
-        "color": "red",
-        "label": "ERROR"
-      }
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "r_ledError",
-      "top": 204.6,
-      "left": 369.45,
-      "rotate": 90,
-      "attrs": {
-        "value": "220"
-      }
-    },
-    {
-      "type": "wokwi-led",
-      "id": "ledMaint",
-      "top": 129,
-      "left": 431.4,
-      "attrs": {
-        "color": "orange",
-        "label": "MAINT"
-      }
-    },
-    {
-      "type": "wokwi-resistor",
-      "id": "r_ledMaint",
-      "top": 204.6,
-      "left": 417.45,
-      "rotate": 90,
-      "attrs": {
-        "value": "220"
       }
     },
     {
@@ -241,7 +142,7 @@
       "top": 308,
       "left": -190,
       "attrs": {
-        "text": "PLUG (cam sac)"
+        "text": "PLUG (nhan = cam / rut)"
       }
     },
     {
@@ -278,6 +179,24 @@
       "left": 420,
       "attrs": {
         "text": "RELAY"
+      }
+    },
+    {
+      "type": "wokwi-rgb-led",
+      "id": "rgb",
+      "top": 120,
+      "left": 320,
+      "attrs": {
+        "common": "cathode"
+      }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "lblRgb",
+      "top": 96,
+      "left": 280,
+      "attrs": {
+        "text": "DEN TRANG THAI (RGB)"
       }
     }
   ],
@@ -421,13 +340,13 @@
       []
     ],
     [
-      "plug:2",
+      "plug:1.l",
       "esp:5",
       "white",
       []
     ],
     [
-      "plug:3",
+      "plug:2.l",
       "bb1:tn.13",
       "black",
       []
@@ -513,226 +432,6 @@
     [
       "battery:BAT-",
       "bb1:bn.6",
-      "black",
-      []
-    ],
-    [
-      "ledReady:A",
-      "bb1:5t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "ledReady:C",
-      "bb1:4t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledReady:1",
-      "bb1:4t.b",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledReady:2",
-      "bb1:4b.f",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "esp:38",
-      "bb1:5t.c",
-      "green",
-      []
-    ],
-    [
-      "bb1:4b.j",
-      "bb1:bn.3",
-      "black",
-      []
-    ],
-    [
-      "ledCharging:A",
-      "bb1:10t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "ledCharging:C",
-      "bb1:9t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledCharging:1",
-      "bb1:9t.b",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledCharging:2",
-      "bb1:9b.f",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "esp:39",
-      "bb1:10t.c",
-      "blue",
-      []
-    ],
-    [
-      "bb1:9b.j",
-      "bb1:bn.8",
-      "black",
-      []
-    ],
-    [
-      "ledPayment:A",
-      "bb1:15t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "ledPayment:C",
-      "bb1:14t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledPayment:1",
-      "bb1:14t.b",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledPayment:2",
-      "bb1:14b.f",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "esp:40",
-      "bb1:15t.c",
-      "yellow",
-      []
-    ],
-    [
-      "bb1:14b.j",
-      "bb1:bn.12",
-      "black",
-      []
-    ],
-    [
-      "ledError:A",
-      "bb1:20t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "ledError:C",
-      "bb1:19t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledError:1",
-      "bb1:19t.b",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledError:2",
-      "bb1:19b.f",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "esp:41",
-      "bb1:20t.c",
-      "red",
-      []
-    ],
-    [
-      "bb1:19b.j",
-      "bb1:bn.16",
-      "black",
-      []
-    ],
-    [
-      "ledMaint:A",
-      "bb1:25t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "ledMaint:C",
-      "bb1:24t.a",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledMaint:1",
-      "bb1:24t.b",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "r_ledMaint:2",
-      "bb1:24b.f",
-      "",
-      [
-        "$bb"
-      ]
-    ],
-    [
-      "esp:42",
-      "bb1:25t.c",
-      "orange",
-      []
-    ],
-    [
-      "bb1:24b.j",
-      "bb1:bn.20",
       "black",
       []
     ],
@@ -862,6 +561,30 @@
       "tft:LED",
       "bb1:tp.15",
       "red",
+      []
+    ],
+    [
+      "rgb:R",
+      "esp:41",
+      "red",
+      []
+    ],
+    [
+      "rgb:G",
+      "esp:38",
+      "green",
+      []
+    ],
+    [
+      "rgb:B",
+      "esp:39",
+      "blue",
+      []
+    ],
+    [
+      "rgb:COM",
+      "bb1:bn.12",
+      "black",
       []
     ]
   ],

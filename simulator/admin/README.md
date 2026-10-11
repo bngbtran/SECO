@@ -50,7 +50,7 @@ Wiring (ESP32-S3), straight to the board, one wire per ESP32 pin:
 
 ## Run it (Wokwi for VS Code)
 
-**Broker:** `#define MQTT_CLOUD 1` (default) connects to `broker.hivemq.com:8883` over TLS, the
+**Broker:** `#define MQTT_CLOUD 1` (default) connects to `broker.hivemq.com:1883` (plain, `MQTT_TLS 0`: the Wokwi gateway cannot open TLS to 8883, rc=-2; it is the same broker on both ports), the
 broker of the API deployed on Render, so the web app at `https://iad-seco.vercel.app` can assign
 cards with nothing running locally. Set `MQTT_CLOUD 0` to use Mosquitto on your computer with the
 API run locally (steps below).

@@ -16,6 +16,7 @@ from app.modules.charging.constants import (
     StopReason,
 )
 from app.modules.charging.realtime import to_jsonable
+from app.modules.charging.usage import record_station_meter
 from app.modules.guest.realtime import (
     announce_guest_stopped,
     announce_payment_qr,
@@ -97,6 +98,8 @@ def _session_brief(session: dict) -> dict[str, Any]:
         "max_budget_vnd": session.get("max_budget_vnd"),
         "energy_kwh": session.get("energy_kwh"),
         "cost_vnd": session.get("cost_vnd"),
+        # The station bills its measured energy at this price on its screen.
+        "price_per_kwh_vnd": session.get("price_per_kwh_vnd"),
         "stop_reason": session.get("stop_reason"),
     }
 
@@ -346,6 +349,7 @@ async def _handle_telemetry(station_id: str, data: dict[str, Any]) -> dict[str, 
         return None
 
     await _mark_seen(station_id, {"latest_telemetry": data})
+    await record_station_meter(station_id, data)
 
     session_id = station.get("current_session_id")
     accounting = None
@@ -419,6 +423,10 @@ async def _handle_event(station_id: str, data: dict[str, Any]) -> dict[str, Any]
     event_type = str(data.get("event") or data.get("type") or "").upper()
     stop_reason = _EVENT_STOP_REASONS.get(event_type)
     result = None
+
+    # UNPLUGGED / safety events carry the final measured energy: store it before
+    # the session is stopped and billed.
+    await record_station_meter(station_id, data)
 
     if stop_reason:
         station = await stations.find_one(
