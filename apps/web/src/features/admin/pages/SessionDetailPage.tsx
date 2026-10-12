@@ -149,7 +149,7 @@ export default function SessionDetailPage() {
       </div>
 
       <div className="kpis">
-        <Kpi label="Điện năng" value={kwh(s.energy_kwh, 5)} unit="kWh" hint={`${Math.round(num(s.energy_kwh) / 0.00125)} tick`} />
+        <Kpi label="Điện năng" value={kwh(s.energy_kwh, 5)} unit="kWh" hint={`${num(s.power_kw) > 0 ? Math.round(num(s.energy_kwh) / (num(s.power_kw) / 120)) : 0} tick`} />
         <Kpi label="Chi phí" value={vnd(s.cost_vnd)} hint={`${vnd(s.price_per_kwh_vnd)}/kWh snapshot`} />
         <Kpi label="Thời lượng" value={dur(s.duration_seconds)} hint={s.ended_at ? `kết thúc ${fTimeS(s.ended_at)}` : "đang chạy"} />
         <Kpi

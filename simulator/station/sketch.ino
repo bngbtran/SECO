@@ -79,30 +79,36 @@
 const char *WIFI_SSID = "Wokwi-GUEST";
 const char *WIFI_PASSWORD = "";
 
-// Broker. MQTT_CLOUD 1: broker.hivemq.com, the broker of the API deployed on
-// Render (https://seco-backend-api.onrender.com). In Wokwi use the plain port
-// 1883 (MQTT_TLS 0): the Wokwi gateway does not open TLS to 8883 (rc=-2), and
-// broker.hivemq.com is one broker on both ports, so the API still gets every
-// message. MQTT_CLOUD 0: Mosquitto on your computer through the Wokwi gateway,
-// for the API run locally (`python -m app`). Station and API: same broker.
-#define MQTT_CLOUD 1
+// Broker: broker.hivemq.com, the broker of the API deployed on Render
+// (https://seco-backend-api.onrender.com); the web app is on Vercel
+// (https://iad-seco.vercel.app). Nothing runs on your computer. In Wokwi use
+// the plain port 1883 (MQTT_TLS 0): the Wokwi gateway does not open TLS to
+// 8883 (rc=-2), and broker.hivemq.com is one broker on both ports, so the API
+// still gets every message.
 #define MQTT_TLS 0  // 1 = broker.hivemq.com:8883 over TLS (real hardware on a normal network)
-#if MQTT_CLOUD
 const char *MQTT_HOST = "broker.hivemq.com";
 const uint16_t MQTT_PORT = MQTT_TLS ? 8883 : 1883;
-#else
-const char *MQTT_HOST = "host.wokwi.internal";
-const uint16_t MQTT_PORT = 1883;
-#endif
 const char *MQTT_USERNAME = nullptr;  // set both for a private broker (HiveMQ Cloud)
 const char *MQTT_PASSWORD = nullptr;
 
 const char *STATION_ID = "EVCS-01";
 const char *FIRMWARE = "station-sim-2.1";
 
-// Billing simulation (DD 5): 0.15 kW per 30 s tick = 0.00125 kWh, 4000 VND/kWh.
-// Billing is time based; the INA219 readings are telemetry only.
-const float TICK_KWH = 0.00125f;
+// Billing: the station measures the energy (INA219 power integrated over time),
+// scales it up (ENERGY_SCALE) and sends it as energy_kwh_sim; the API bills
+// energy_kwh_sim x the session price. Without an INA219 nothing is sent and
+// the API falls back to time based billing: 0.1 kW per 30 s tick.
+const float POWER_KW = 0.1f;
+const float TICK_KWH = POWER_KW * 30.0f / 3600.0f;
+// The bench load is a 9 V battery and an LED (about 11 mA, 0.1 W). What the
+// screen and the telemetry show is scaled up to charger-like numbers:
+// 9 V -> 900 V, 11 mA -> 0.11 A, so 0.1 W reads as 0.1 kW. The safety check
+// (OVER_CURRENT_A) still uses the real current.
+const float SHOWN_VOLT_SCALE = 100.0f;
+const float SHOWN_AMP_SCALE = 10.0f;
+const float SHOWN_KW_PER_W = SHOWN_VOLT_SCALE * SHOWN_AMP_SCALE / 1000.0f;
+// Billed energy = measured energy x this, the same factor as the power shown.
+const float ENERGY_SCALE = SHOWN_VOLT_SCALE * SHOWN_AMP_SCALE;
 const unsigned long TICK_MS = 30000;
 const float OVER_TEMPERATURE_C = 35.0f;  // DS18B20 above this -> OVER_TEMPERATURE -> ERROR
 const float OVER_CURRENT_A = 1.0f;       // INA219 above this for 0.5 s -> FAULT (SYSTEM_ERROR)
@@ -128,7 +134,7 @@ const int BUDGET_COUNT = sizeof(BUDGET_LEVELS) / sizeof(BUDGET_LEVELS[0]);
 
 // ---- Devices ---------------------------------------------------------------
 
-#if MQTT_CLOUD && MQTT_TLS
+#if MQTT_TLS
 WiFiClientSecure wifi;  // TLS
 #else
 WiFiClient wifi;
@@ -217,6 +223,7 @@ bool inaOk = false;        // INA219 found on the I2C bus
 float busVoltage = 0;      // V
 float loadCurrent = 0;     // A
 float loadPower = 0;       // W
+double meteredWs = 0;      // real energy of the open session, watt seconds
 
 unsigned long messageUntil = 0;  // a notice is on screen until then
 unsigned long lastHeartbeat = 0;
@@ -334,13 +341,21 @@ LockStatus parseLock(const String &s) {
 
 // ---- Session numbers -------------------------------------------------------
 
+/** Real energy the INA219 measured in this session, kWh. */
+double meteredRawKwh() { return meteredWs / 3600000.0; }
+
+/** Energy the session is billed for, kWh: measured x ENERGY_SCALE. */
 float sessionEnergy() {
   if (!sessionStartedAt) return 0;
+  if (inaOk) return (float)(meteredRawKwh() * ENERGY_SCALE);
   unsigned long ticks = (millis() - sessionStartedAt) / TICK_MS;
   return ticks * TICK_KWH;
 }
 
-long sessionCost() { return lround(sessionEnergy() * sessionPrice); }
+long sessionCost() {
+  long cost = lround(sessionEnergy() * sessionPrice);
+  return sessionBudget > 0 ? min(cost, sessionBudget) : cost;  // the API never bills past the budget
+}
 
 bool techArmed() { return techUid.length() && techUntil && millis() < techUntil; }
 
@@ -671,9 +686,10 @@ void drawCharging() {
          C_MUTED, Align::Left, C_CARD);
   }
 
-  // V / A / W / C from the INA219 and the DS18B20.
+  // V / A / kW (scaled, see SHOWN_VOLT_SCALE) / C from the INA219 and the DS18B20.
   const char *names[] = {"Dien ap", "Dong", "Cong suat", "Nhiet do"};
-  String values[] = {String(busVoltage, 2) + "V", String(loadCurrent, 2) + "A", String(loadPower, 2) + "W",
+  String values[] = {String(busVoltage * SHOWN_VOLT_SCALE, 0) + "V", String(loadCurrent * SHOWN_AMP_SCALE, 2) + "A",
+                     String(loadPower * SHOWN_KW_PER_W, 2) + "kW",
                      String(temperatureC, 1) + "C"};
   for (int i = 0; i < 4; i++) {
     text(20 + i, i * 60, 278, 60, 12, names[i], nullptr, C_MUTED);
@@ -836,10 +852,19 @@ void request(JsonDocument &doc) {
   publishJson("req", doc);
 }
 
+/** Measured energy of the open session: the API bills from it (see ENERGY_SCALE). */
+void addMeter(JsonDocument &doc) {
+  if (!inaOk || session != SessionStatus::Active || !sessionId.length()) return;
+  doc["session_id"] = sessionId;
+  doc["energy_kwh_sim"] = meteredRawKwh() * ENERGY_SCALE;
+  doc["energy_kwh_raw"] = meteredRawKwh();
+}
+
 void sendEvent(const char *event, const char *key = nullptr, float value = 0) {
   JsonDocument doc;
   doc["event"] = event;
   if (sessionId.length()) doc["session_id"] = sessionId;
+  addMeter(doc);  // UNPLUGGED / safety events carry the final measured energy
   if (key) doc[key] = value;
   publishJson("event", doc);
 }
@@ -854,12 +879,13 @@ void ack(const String &command, bool ok = true) {
 
 void sendTelemetry() {
   JsonDocument doc;
-  doc["voltage_v"] = roundf(busVoltage * 100) / 100;
-  doc["current_a"] = roundf(loadCurrent * 1000) / 1000;
-  doc["power_kw"] = roundf(loadPower) / 1000.0f;
+  doc["voltage_v"] = roundf(busVoltage * SHOWN_VOLT_SCALE);
+  doc["current_a"] = roundf(loadCurrent * SHOWN_AMP_SCALE * 1000) / 1000;
+  doc["power_kw"] = roundf(loadPower * SHOWN_KW_PER_W * 1000) / 1000;
   doc["temperature_c"] = roundf(temperatureC * 10) / 10;
   doc["relay"] = relayOn;
   doc["plugged"] = plugged;
+  addMeter(doc);
   publishJson("telemetry", doc);
 }
 
@@ -1065,6 +1091,10 @@ void applySync(JsonDocument &doc) {
   sessionPrice = s["price_per_kwh_vnd"] | 4000;
   stopReason = s["stop_reason"] | "";
   sessionStartedAt = millis() - (unsigned long)(s["duration_seconds"] | 0) * 1000UL;
+  // The API stored the energy we measured: carry on counting from it.
+  double storedRaw = s["energy_kwh_raw"] | 0.0;
+  double storedSim = s["energy_kwh_sim"] | 0.0;
+  meteredWs = (storedRaw > 0 ? storedRaw : storedSim / ENERGY_SCALE) * 3600000.0;
 
   if (session == SessionStatus::WaitingPayment) {
     JsonObject p = doc["payment"];
@@ -1139,8 +1169,9 @@ void onResponse(JsonDocument &doc) {
       sessionId = s["session_id"] | "";
       sessionType = type == "GUEST_START" ? "GUEST" : "MEMBER";
       sessionBudget = s["max_budget_vnd"] | 0;
-      sessionPrice = 4000;
+      sessionPrice = s["price_per_kwh_vnd"] | 4000;
       sessionStartedAt = millis();
+      meteredWs = 0;
       stopReason = "";
       session = SessionStatus::Active;
       payment = PaymentStatus::None;
@@ -1470,6 +1501,11 @@ void readPower() {
   loadCurrent = ina219.getCurrent_mA() / 1000.0f;
   loadPower = ina219.getPower_mW() / 1000.0f;
 
+  // Energy meter: add up the real power while the relay feeds an open session.
+  static unsigned long lastMeterAt = 0;
+  if (relayOn && session == SessionStatus::Active) meteredWs += loadPower * (lastRead - lastMeterAt) / 1000.0;
+  lastMeterAt = lastRead;
+
   // Over current: two readings in a row (0.5 s) above the limit while charging.
   static int overReadings = 0;
   overReadings = relayOn && loadCurrent > OVER_CURRENT_A ? overReadings + 1 : 0;
@@ -1549,7 +1585,7 @@ void setup() {
   }
   Serial.printf(" connected, IP %s\r\n", WiFi.localIP().toString().c_str());
 
-#if MQTT_CLOUD && MQTT_TLS
+#if MQTT_TLS
   // Encrypted but not authenticated: fine for the demo broker. Pin the CA
   // (wifi.setCACert) for a private broker.
   wifi.setInsecure();

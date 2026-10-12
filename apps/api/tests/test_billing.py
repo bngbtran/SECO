@@ -9,17 +9,21 @@ from app.modules.billing.service import (
 
 
 def test_energy_for_30_seconds():
-    assert energy_for_seconds(30) == Decimal("0.00125")
+    assert energy_for_seconds(30) == Decimal("0.1") * 30 / 3600
+    assert energy_for_seconds(3600) == Decimal("0.1")
 
 
 def test_cost_for_30_seconds():
     assert cost_for_energy(Decimal("0.00125"), 4000) == 5
+    # 0.1 kW for 30 s is 3.33 VND; the cost is rounded from the total energy.
+    assert cost_for_energy(energy_for_seconds(30), 4000) == 3
+    assert cost_for_energy(energy_for_seconds(90), 4000) == 10
 
 
 def test_tick_values():
     energy, cost = tick_values()
-    assert energy == Decimal("0.00125")
-    assert cost == 5
+    assert energy == Decimal("0.1") * 30 / 3600
+    assert cost == 3
 
 
 def test_budget_must_not_exceed_balance():

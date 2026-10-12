@@ -324,8 +324,8 @@ export default function StationDetailPage() {
       {session?.status === "WAITING_PAYMENT" && <PendingPayment sessionId={session.session_id} />}
 
       <div className="gauges">
-        <GaugeBox icon={Zap} label="Điện áp" value={station.is_online && t.voltage_v != null ? t.voltage_v.toFixed(2) : "—"} unit="V" pct={((t.voltage_v ?? 0) / 13) * 100} />
-        <GaugeBox icon={Activity} label="Dòng điện" value={charging ? num(t.current_a).toFixed(2) : "0.00"} unit="A" pct={charging ? (num(t.current_a) / 15) * 100 : 0} color="var(--blue)" />
+        <GaugeBox icon={Zap} label="Điện áp" value={station.is_online && t.voltage_v != null ? t.voltage_v.toFixed(0) : "—"} unit="V" pct={((t.voltage_v ?? 0) / 1000) * 100} />
+        <GaugeBox icon={Activity} label="Dòng điện" value={charging ? num(t.current_a).toFixed(2) : "0.00"} unit="A" pct={charging ? (num(t.current_a) / 0.5) * 100 : 0} color="var(--blue)" />
         <GaugeBox icon={Gauge} label="Công suất" value={charging ? num(t.power_kw ?? session?.power_kw).toFixed(3) : "0.000"} unit="kW" pct={charging ? (num(t.power_kw ?? session?.power_kw) / 0.2) * 100 : 0} color="var(--blue)" />
         <GaugeBox
           icon={Thermometer}
@@ -339,7 +339,7 @@ export default function StationDetailPage() {
 
       <div className="g-2-1 mt">
         <div className="col" style={{ gap: 16 }}>
-          <Card title="Điện năng phiên hiện tại" subtitle="energy_kwh tích luỹ theo tick (0.00125 kWh / 30 giây)">
+          <Card title="Điện năng phiên hiện tại" subtitle="energy_kwh tích luỹ theo tick (0,1 kW × 30 giây ≈ 0.00083 kWh)">
             {session && session.status === "ACTIVE" ? (
               <>
                 <AreaChart values={series} height={190} color="#2e6fb7" format={(x) => x.toFixed(4)} />

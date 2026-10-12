@@ -14,14 +14,11 @@ Trụ giao tiếp với API qua MQTT `evcs/EVCS-01/*`.
 
 Mọi lệnh chạy sau `conda activate iad`.
 
-Trụ và API phải dùng **cùng một MQTT broker**. Chọn bằng `#define MQTT_CLOUD` ở đầu `sketch.ino`:
+Trụ dùng API đã deploy trên Render (`https://seco-backend-api.onrender.com`) và web trên Vercel (`https://iad-seco.vercel.app`). **Không cần chạy gì trên máy**: không Docker, không API, database hay broker local.
 
-| `MQTT_CLOUD` | Broker | Dùng với |
-|---|---|---|
-| **`1`** (mặc định) | `broker.hivemq.com:1883` (không TLS, `MQTT_TLS 0`) | API đã deploy trên Render (`https://seco-backend-api.onrender.com`) và web `https://iad-seco.vercel.app`. **Không cần chạy gì trên máy.** Gateway của Wokwi không mở được TLS tới cổng 8883 (`MQTT connect failed, rc=-2`); `broker.hivemq.com` là một broker cho cả hai cổng nên API (8883) vẫn nhận đủ. |
-| `0` | Mosquitto trên máy qua `host.wokwi.internal:1883` | API chạy local (`cd apps/api && python -m app`) và `npm run dev:web` |
+Trụ và API dùng chung broker `broker.hivemq.com`. Trong Wokwi trụ nối cổng 1883 (không TLS, `MQTT_TLS 0`) vì gateway của Wokwi không mở được TLS tới cổng 8883 (`MQTT connect failed, rc=-2`); đây là một broker cho cả hai cổng nên API (8883) vẫn nhận đủ.
 
-1. Chọn `MQTT_CLOUD`, rồi `cd simulator/station && ./build.sh` để build firmware.
+1. `cd simulator/station && ./build.sh` để build firmware.
 2. Trong VS Code, mở `simulator/station/diagram.json` rồi chạy **Wokwi: Start Simulator**.
 3. Mở web admin. Trạm `EVCS-01` (đã có trong seed) chuyển sang online và cập nhật realtime.
 
@@ -134,17 +131,13 @@ Hàng 4: khách sạc dưới 30 giây (miễn phí).
 
 ## Thanh toán QR cho khách (trang Sandbox)
 
-QR mở trang **`http://localhost:5173/pay/<payment_id>`** trên web. Trang này không cần đăng nhập và hiện số tiền, trạm, số kWh, thời gian và lý do dừng.
+QR mở trang **`https://iad-seco.vercel.app/pay/<payment_id>`** trên web. Trang này không cần đăng nhập và hiện số tiền, trạm, số kWh, thời gian và lý do dừng.
 - Bấm **Thanh toán** thì payment chuyển `PAID`, server gửi `UNLOCK`: servo mở khóa, trụ về READY.
 - Bấm **Hủy** thì payment chuyển `CANCELLED`, nhấn joystick trên trụ để tạo QR mới.
 
 Đầu sạc **chỉ mở khóa khi đã thanh toán** (DD 3.2). Admin vẫn có lệnh `UNLOCK` trên web cho trường hợp khẩn cấp.
 
-Để **quét bằng điện thoại thật**:
-1. Đổi `GUEST_PAYMENT_URL_BASE=http://<IP LAN máy bạn>:5173/pay` trong `apps/api/.env`.
-2. Chạy web với `npm run dev:web -- --host`.
-
-Mặc định link trỏ tới `localhost`, nên chỉ mở được trên chính máy tính đó.
+Link trỏ tới web trên Vercel (`GUEST_PAYMENT_URL_BASE` đặt trên Render), nên **quét bằng điện thoại thật** được ngay.
 
 ## Các luồng (thao tác trong Wokwi)
 

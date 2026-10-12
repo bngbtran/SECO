@@ -70,4 +70,4 @@ Lỗi thường gặp:
 
 ## Chạy local không đổi
 
-`npm run dev:web` vẫn dùng Vite proxy (`/api`, `/ws` → `localhost:8000`). `vercel.json` và `VITE_WS_URL` chỉ có tác dụng trên Vercel.
+`npm run dev:web` vẫn dùng Vite proxy (`/api`, `/ws` → backend trên Render; đặt `SECO_API_URL` để trỏ sang API khác). `vercel.json` và `VITE_WS_URL` chỉ có tác dụng trên Vercel.

@@ -5,11 +5,13 @@ screen-flow prototype `index.html` at the repo root.
 
 ## Run
 
-```bash
-# 1. API on :8000 (conda env iad), from apps/api
-python -m app
+The deployed app is https://iad-seco.vercel.app (Vercel), on the backend at
+https://seco-backend-api.onrender.com (Render). Nothing has to run locally:
+no Docker, no local API, database or broker.
 
-# 2. Web on :5173, from the repo root
+To work on the UI, from the repo root:
+
+```bash
 npm install
 npm run dev:web
 ```
@@ -17,8 +19,8 @@ npm run dev:web
 Open http://localhost:5173 and sign in with an ADMIN account
 (e.g. `tranbnb@seco.com` / `seco`). Member and technician accounts are rejected.
 
-`/api` and `/ws` are proxied to the API (`SECO_API_URL`, default
-`http://localhost:8000`), so no CORS setup is needed in development.
+`/api` and `/ws` are proxied to the Render backend (`SECO_API_URL` overrides
+it), so no CORS setup is needed in development.
 
 ## Screens
 

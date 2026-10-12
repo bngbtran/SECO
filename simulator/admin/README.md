@@ -50,21 +50,15 @@ Wiring (ESP32-S3), straight to the board, one wire per ESP32 pin:
 
 ## Run it (Wokwi for VS Code)
 
-**Broker:** `#define MQTT_CLOUD 1` (default) connects to `broker.hivemq.com:1883` (plain, `MQTT_TLS 0`: the Wokwi gateway cannot open TLS to 8883, rc=-2; it is the same broker on both ports), the
+**Broker:** the reader connects to `broker.hivemq.com:1883` (plain, `MQTT_TLS 0`: the Wokwi gateway cannot open TLS to 8883, rc=-2; it is the same broker on both ports), the
 broker of the API deployed on Render, so the web app at `https://iad-seco.vercel.app` can assign
-cards with nothing running locally. Set `MQTT_CLOUD 0` to use Mosquitto on your computer with the
-API run locally (steps below).
+cards with nothing running locally: no Docker, no local API, database or broker.
 
 Prerequisites: the **Wokwi Simulator** VS Code extension (activate the license
-once with *Wokwi: Request a New License*), `arduino-cli`, and Mosquitto on
-port 1883 (the broker the API uses).
+once with *Wokwi: Request a New License*) and `arduino-cli`.
 
 ```bash
 conda activate iad    # every command below runs in the project env
-
-# API (apps/api) and web (repo root), as usual
-python -m app
-npm run dev:web
 
 # Build the firmware
 cd simulator/admin
@@ -77,17 +71,8 @@ the *Gán thẻ* dialog stops saying the reader is offline.
 
 Rebuild with `./build.sh` after editing `sketch.ino`, then restart the simulator.
 
-### Network
-
-The firmware connects to `host.wokwi.internal:1883`, which Wokwi for VS Code
-maps to your computer through its private IoT gateway. If your setup cannot
-reach the host, use a public broker on both sides (demo only, anyone can read it):
-
-- `sketch.ino`: `MQTT_HOST = "broker.hivemq.com"`, then `./build.sh`;
-- `apps/api/.env`: `MQTT_HOST=broker.hivemq.com`, then restart the API.
-
 On wokwi.com, copy `sketch.ino`, `diagram.json` and `libraries.txt` into a new
-ESP32-S3 project and use a public broker the same way.
+ESP32-S3 project; it reaches the same broker.
 
 ## MQTT contract
 

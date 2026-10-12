@@ -99,7 +99,7 @@ async def refresh_session_usage(session: dict) -> tuple[dict, bool]:
 
     A station that measures energy (record_station_meter) is billed from it:
     cost = energy_kwh_sim x the session price. Otherwise energy is simulated
-    (DD 5): 0.15 kW every 30 s tick, so usage depends only on how many whole
+    (DD 5): 0.1 kW every 30 s tick, so usage depends only on how many whole
     ticks have passed since the session started. Both keep the update
     idempotent no matter how often telemetry or the ticker call it.
     Returns the (possibly updated) session and whether the budget is used up.
@@ -110,18 +110,26 @@ async def refresh_session_usage(session: dict) -> tuple[dict, bool]:
     tick_seconds = settings.energy_tick_seconds
     price = int(session.get("price_per_kwh_vnd", settings.price_per_kwh_vnd))
     power_kw = from_decimal128(session.get("power_kw", settings.energy_power_kw_decimal))
-    # The session's own snapshot price, not today's tariff.
-    tick_cost_vnd = cost_for_energy(energy_for_seconds(tick_seconds, power_kw), price)
+
+    def cost_after(tick_count: int) -> int:
+        # The session's own snapshot price, not today's tariff. One tick is not
+        # a whole number of VND (0.1 kW at 4000 VND/kWh = 3.33), so the cost is
+        # always rounded from the total, never summed from rounded ticks.
+        return cost_for_energy(energy_for_seconds(tick_count * tick_seconds, power_kw), price)
 
     elapsed = (now_utc() - _as_utc(session["started_at"])).total_seconds()
     ticks = max(int(elapsed // tick_seconds), 0)
 
     budget = session.get("max_budget_vnd")
-    if budget is not None and tick_cost_vnd > 0:
-        ticks = min(ticks, int(budget) // tick_cost_vnd)
+    if budget is not None and power_kw > 0 and price > 0:
+        tick_cost = energy_for_seconds(tick_seconds, power_kw) * price
+        affordable = int(Decimal(int(budget)) / tick_cost)
+        while affordable > 0 and cost_after(affordable) > int(budget):
+            affordable -= 1
+        ticks = min(ticks, affordable)
 
     energy_kwh = energy_for_seconds(ticks * tick_seconds, power_kw)
-    cost_vnd = cost_for_energy(energy_kwh, price)
+    cost_vnd = cost_after(ticks)
 
     current_energy = from_decimal128(session.get("energy_kwh", Decimal(0)))
     if energy_kwh > current_energy:
@@ -132,7 +140,7 @@ async def refresh_session_usage(session: dict) -> tuple[dict, bool]:
         )
         session = updated or session
 
-    budget_exhausted = budget is not None and cost_vnd + tick_cost_vnd > int(budget)
+    budget_exhausted = budget is not None and cost_after(ticks + 1) > int(budget)
     return session, budget_exhausted
 
 

@@ -37,21 +37,15 @@
 const char *WIFI_SSID = "Wokwi-GUEST";
 const char *WIFI_PASSWORD = "";
 
-// Broker. MQTT_CLOUD 1: broker.hivemq.com, the broker of the API deployed on
-// Render (https://seco-backend-api.onrender.com). In Wokwi use the plain port
-// 1883 (MQTT_TLS 0): the Wokwi gateway does not open TLS to 8883 (rc=-2), and
-// broker.hivemq.com is one broker on both ports, so the API still gets every
-// message. MQTT_CLOUD 0: Mosquitto on your computer through the Wokwi gateway,
-// for the API run locally (`python -m app`). Station and API: same broker.
-#define MQTT_CLOUD 1
+// Broker: broker.hivemq.com, the broker of the API deployed on Render
+// (https://seco-backend-api.onrender.com); the web app is on Vercel
+// (https://iad-seco.vercel.app). Nothing runs on your computer. In Wokwi use
+// the plain port 1883 (MQTT_TLS 0): the Wokwi gateway does not open TLS to
+// 8883 (rc=-2), and broker.hivemq.com is one broker on both ports, so the API
+// still gets every message.
 #define MQTT_TLS 0  // 1 = broker.hivemq.com:8883 over TLS (real hardware on a normal network)
-#if MQTT_CLOUD
 const char *MQTT_HOST = "broker.hivemq.com";
 const uint16_t MQTT_PORT = MQTT_TLS ? 8883 : 1883;
-#else
-const char *MQTT_HOST = "host.wokwi.internal";
-const uint16_t MQTT_PORT = 1883;
-#endif
 const char *MQTT_USERNAME = nullptr;  // set both for a private broker (HiveMQ Cloud)
 const char *MQTT_PASSWORD = nullptr;
 
@@ -75,7 +69,7 @@ const unsigned long MESSAGE_MS = 3500;  // how long a result stays on the OLED
 
 // ---- State -----------------------------------------------------------------
 
-#if MQTT_CLOUD && MQTT_TLS
+#if MQTT_TLS
 WiFiClientSecure wifi;  // TLS
 #else
 WiFiClient wifi;
@@ -508,7 +502,7 @@ void setup() {
   }
   Serial.printf("WiFi connected, IP %s\n", WiFi.localIP().toString().c_str());
 
-#if MQTT_CLOUD && MQTT_TLS
+#if MQTT_TLS
   // Encrypted but not authenticated: fine for the demo broker. Pin the CA
   // (wifi.setCACert) for a private broker.
   wifi.setInsecure();

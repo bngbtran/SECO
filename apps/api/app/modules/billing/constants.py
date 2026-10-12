@@ -1,5 +1,5 @@
 from decimal import Decimal
 
-DEFAULT_POWER_KW = Decimal("0.15")
+DEFAULT_POWER_KW = Decimal("0.1")
 DEFAULT_TICK_SECONDS = 30
 DEFAULT_PRICE_PER_KWH_VND = 4000
