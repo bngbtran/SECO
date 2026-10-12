@@ -582,7 +582,7 @@ def test_price_change_applies_to_new_sessions_only(captured):
             async with api() as http:
                 auth = await login(http, admin)
                 original = (await http.get("/api/v1/admin/prices/current", headers=auth)).json()
-                assert original["tick_cost_vnd"] == 5
+                assert original["tick_cost_vnd"] == 3
 
                 await handle_message(f"evcs/{running_station}/req", b'{"type":"GUEST_START"}')
 
@@ -595,7 +595,7 @@ def test_price_change_applies_to_new_sessions_only(captured):
                 try:
                     current = (await http.get("/api/v1/admin/prices/current", headers=auth)).json()
                     assert current["price_per_kwh_vnd"] == 8000
-                    assert current["tick_cost_vnd"] == 10
+                    assert current["tick_cost_vnd"] == 7
 
                     response = await http.post(
                         "/api/v1/admin/prices",

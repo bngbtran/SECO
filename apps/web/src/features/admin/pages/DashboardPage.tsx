@@ -137,7 +137,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Tổng quan hệ thống"
-        subtitle="Số liệu cập nhật realtime qua WebSocket · 1 tick = 30 giây sạc = 0.00125 kWh"
+        subtitle="Số liệu cập nhật realtime qua WebSocket · 1 tick = 30 giây sạc ở 0,1 kW ≈ 0.00083 kWh"
         actions={
           <button className="btn btn-primary" onClick={() => setAdding(true)}>
             <Plus size={15} />
@@ -153,7 +153,7 @@ export default function DashboardPage() {
           value={d.sessions_active}
           hint={`${d.sessions_waiting_payment} chờ thanh toán · ${d.sessions_completed_today} hoàn tất hôm nay`}
         />
-        <Kpi icon={Gauge} label="Điện năng hôm nay" value={kwh(d.energy_today_kwh)} unit="kWh" hint="Các phiên đã hoàn tất · 0.00125 kWh/tick" />
+        <Kpi icon={Gauge} label="Điện năng hôm nay" value={kwh(d.energy_today_kwh)} unit="kWh" hint="Các phiên đã hoàn tất · ≈ 0.00083 kWh/tick" />
         <Kpi icon={Wallet} label="Doanh thu hôm nay" value={vnd(d.revenue_today_vnd)} hint={`Giá ${vnd(d.price_per_kwh_vnd)}/kWh`} />
         <Kpi
           icon={AlertTriangle}

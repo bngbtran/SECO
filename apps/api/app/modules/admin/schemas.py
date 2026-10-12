@@ -322,7 +322,7 @@ class AdminPrice(BaseModel):
 
 class AdminCurrentPrice(BaseModel):
     price_per_kwh_vnd: int
-    # Cost of one simulated 30 s tick (0.00125 kWh) at this price.
+    # Cost of one simulated 30 s tick (0.1 kW = 0.000833 kWh) at this price, rounded.
     tick_cost_vnd: int
     effective_from: datetime | None
 

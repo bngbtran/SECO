@@ -103,9 +103,17 @@
 
 const char *FIRMWARE = "station-hw-1.0";
 
-// Billing simulation (DD 5): 0.15 kW per 30 s tick = 0.00125 kWh, 4000 VND/kWh.
+// Billing simulation (DD 5): 0.1 kW per 30 s tick = 0.000833 kWh, 4000 VND/kWh.
 // Billing is time based; the INA219 readings are telemetry only.
-const float TICK_KWH = 0.00125f;
+const float POWER_KW = 0.1f;
+const float TICK_KWH = POWER_KW * 30.0f / 3600.0f;
+// The bench load is a 9 V battery and an LED (about 11 mA, 0.1 W). What the
+// screen and the telemetry show is scaled up to charger-like numbers:
+// 9 V -> 900 V, 11 mA -> 0.11 A, so 0.1 W reads as 0.1 kW. The safety check
+// (OVER_CURRENT_A) still uses the real current.
+const float SHOWN_VOLT_SCALE = 100.0f;
+const float SHOWN_AMP_SCALE = 10.0f;
+const float SHOWN_KW_PER_W = SHOWN_VOLT_SCALE * SHOWN_AMP_SCALE / 1000.0f;
 const unsigned long TICK_MS = 30000;
 
 // ---- Pins (ESP32-S3) -------------------------------------------------------
@@ -682,9 +690,10 @@ void drawCharging() {
          C_MUTED, Align::Left, C_CARD);
   }
 
-  // V / A / W / C from the INA219 and the DS18B20.
+  // V / A / kW (scaled, see SHOWN_VOLT_SCALE) / C from the INA219 and the DS18B20.
   const char *names[] = {"Dien ap", "Dong", "Cong suat", "Nhiet do"};
-  String values[] = {String(busVoltage, 2) + "V", String(loadCurrent, 2) + "A", String(loadPower, 2) + "W",
+  String values[] = {String(busVoltage * SHOWN_VOLT_SCALE, 0) + "V", String(loadCurrent * SHOWN_AMP_SCALE, 2) + "A",
+                     String(loadPower * SHOWN_KW_PER_W, 2) + "kW",
                      String(temperatureC, 1) + "C"};
   for (int i = 0; i < 4; i++) {
     text(20 + i, i * 60, 278, 60, 12, names[i], nullptr, C_MUTED);
@@ -865,9 +874,9 @@ void ack(const String &command, bool ok = true) {
 
 void sendTelemetry() {
   JsonDocument doc;
-  doc["voltage_v"] = roundf(busVoltage * 100) / 100;
-  doc["current_a"] = roundf(loadCurrent * 1000) / 1000;
-  doc["power_kw"] = roundf(loadPower) / 1000.0f;
+  doc["voltage_v"] = roundf(busVoltage * SHOWN_VOLT_SCALE);
+  doc["current_a"] = roundf(loadCurrent * SHOWN_AMP_SCALE * 1000) / 1000;
+  doc["power_kw"] = roundf(loadPower * SHOWN_KW_PER_W * 1000) / 1000;
   doc["temperature_c"] = roundf(temperatureC * 10) / 10;
   doc["relay"] = relayOn;
   doc["plugged"] = plugged;

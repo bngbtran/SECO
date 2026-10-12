@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     web_origin: str = "http://localhost:5173"
 
-    energy_power_kw: str = "0.15"
+    energy_power_kw: str = "0.1"
     energy_tick_seconds: int = 30
     price_per_kwh_vnd: int = 4000
     session_ticker_interval_seconds: int = 5

@@ -190,7 +190,7 @@ export default function StationsPage() {
                       <td>
                         <LockBadge value={s.connector_lock} />
                       </td>
-                      <td className="r num">{s.is_online && t.voltage_v != null ? `${t.voltage_v.toFixed(2)} V` : "—"}</td>
+                      <td className="r num">{s.is_online && t.voltage_v != null ? `${t.voltage_v.toFixed(0)} V` : "—"}</td>
                       <td className="r num">
                         {s.availability === "CHARGING" ? `${num(t.power_kw ?? s.current_session?.power_kw).toFixed(3)} kW` : "0.000 kW"}
                       </td>
