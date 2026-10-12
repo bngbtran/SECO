@@ -103,8 +103,10 @@
 
 const char *FIRMWARE = "station-hw-1.0";
 
-// Billing simulation (DD 5): 0.1 kW per 30 s tick = 0.000833 kWh, 4000 VND/kWh.
-// Billing is time based; the INA219 readings are telemetry only.
+// Billing: the station measures the energy (INA219 power integrated over time),
+// scales it up (ENERGY_SCALE) and sends it as energy_kwh_sim; the API bills
+// energy_kwh_sim x the session price. Without an INA219 nothing is sent and
+// the API falls back to time based billing: 0.1 kW per 30 s tick.
 const float POWER_KW = 0.1f;
 const float TICK_KWH = POWER_KW * 30.0f / 3600.0f;
 // The bench load is a 9 V battery and an LED (about 11 mA, 0.1 W). What the
@@ -114,6 +116,8 @@ const float TICK_KWH = POWER_KW * 30.0f / 3600.0f;
 const float SHOWN_VOLT_SCALE = 100.0f;
 const float SHOWN_AMP_SCALE = 10.0f;
 const float SHOWN_KW_PER_W = SHOWN_VOLT_SCALE * SHOWN_AMP_SCALE / 1000.0f;
+// Billed energy = measured energy x this, the same factor as the power shown.
+const float ENERGY_SCALE = SHOWN_VOLT_SCALE * SHOWN_AMP_SCALE;
 const unsigned long TICK_MS = 30000;
 
 // ---- Pins (ESP32-S3) -------------------------------------------------------
@@ -236,6 +240,7 @@ bool inaOk = false;        // INA219 found on the I2C bus
 float busVoltage = 0;      // V
 float loadCurrent = 0;     // A
 float loadPower = 0;       // W
+double meteredWs = 0;      // real energy of the open session, watt seconds
 
 unsigned long messageUntil = 0;  // a notice is on screen until then
 unsigned long lastHeartbeat = 0;
@@ -353,13 +358,21 @@ LockStatus parseLock(const String &s) {
 
 // ---- Session numbers -------------------------------------------------------
 
+/** Real energy the INA219 measured in this session, kWh. */
+double meteredRawKwh() { return meteredWs / 3600000.0; }
+
+/** Energy the session is billed for, kWh: measured x ENERGY_SCALE. */
 float sessionEnergy() {
   if (!sessionStartedAt) return 0;
+  if (inaOk) return (float)(meteredRawKwh() * ENERGY_SCALE);
   unsigned long ticks = (millis() - sessionStartedAt) / TICK_MS;
   return ticks * TICK_KWH;
 }
 
-long sessionCost() { return lround(sessionEnergy() * sessionPrice); }
+long sessionCost() {
+  long cost = lround(sessionEnergy() * sessionPrice);
+  return sessionBudget > 0 ? min(cost, sessionBudget) : cost;  // the API never bills past the budget
+}
 
 bool techArmed() { return techUid.length() && techUntil && millis() < techUntil; }
 
@@ -856,10 +869,19 @@ void request(JsonDocument &doc) {
   publishJson("req", doc);
 }
 
+/** Measured energy of the open session: the API bills from it (see ENERGY_SCALE). */
+void addMeter(JsonDocument &doc) {
+  if (!inaOk || session != SessionStatus::Active || !sessionId.length()) return;
+  doc["session_id"] = sessionId;
+  doc["energy_kwh_sim"] = meteredRawKwh() * ENERGY_SCALE;
+  doc["energy_kwh_raw"] = meteredRawKwh();
+}
+
 void sendEvent(const char *event, const char *key = nullptr, float value = 0) {
   JsonDocument doc;
   doc["event"] = event;
   if (sessionId.length()) doc["session_id"] = sessionId;
+  addMeter(doc);  // UNPLUGGED / safety events carry the final measured energy
   if (key) doc[key] = value;
   publishJson("event", doc);
 }
@@ -880,6 +902,7 @@ void sendTelemetry() {
   doc["temperature_c"] = roundf(temperatureC * 10) / 10;
   doc["relay"] = relayOn;
   doc["plugged"] = plugged;
+  addMeter(doc);
   publishJson("telemetry", doc);
 }
 
@@ -1085,6 +1108,10 @@ void applySync(JsonDocument &doc) {
   sessionPrice = s["price_per_kwh_vnd"] | 4000;
   stopReason = s["stop_reason"] | "";
   sessionStartedAt = millis() - (unsigned long)(s["duration_seconds"] | 0) * 1000UL;
+  // The API stored the energy we measured: carry on counting from it.
+  double storedRaw = s["energy_kwh_raw"] | 0.0;
+  double storedSim = s["energy_kwh_sim"] | 0.0;
+  meteredWs = (storedRaw > 0 ? storedRaw : storedSim / ENERGY_SCALE) * 3600000.0;
 
   if (session == SessionStatus::WaitingPayment) {
     JsonObject p = doc["payment"];
@@ -1159,8 +1186,9 @@ void onResponse(JsonDocument &doc) {
       sessionId = s["session_id"] | "";
       sessionType = type == "GUEST_START" ? "GUEST" : "MEMBER";
       sessionBudget = s["max_budget_vnd"] | 0;
-      sessionPrice = 4000;
+      sessionPrice = s["price_per_kwh_vnd"] | 4000;
       sessionStartedAt = millis();
+      meteredWs = 0;
       stopReason = "";
       session = SessionStatus::Active;
       payment = PaymentStatus::None;
@@ -1594,6 +1622,11 @@ void readPower() {
   busVoltage = ina219.getBusVoltage_V();
   loadCurrent = ina219.getCurrent_mA() / 1000.0f;
   loadPower = ina219.getPower_mW() / 1000.0f;
+
+  // Energy meter: add up the real power while the relay feeds an open session.
+  static unsigned long lastMeterAt = 0;
+  if (relayOn && session == SessionStatus::Active) meteredWs += loadPower * (lastRead - lastMeterAt) / 1000.0;
+  lastMeterAt = lastRead;
 
   // Over current: two readings in a row (0.5 s) above the limit while charging.
   static int overReadings = 0;
