@@ -75,13 +75,13 @@ Gõ UID hex + Enter trong Serial Monitor để giả lập quẹt thẻ.
 
 ## 5. Khác với bản mô phỏng Wokwi
 
+Bản mô phỏng chạy **cùng một code** với trạm thật: cùng chân (servo GPIO 45), cùng cách xử lý joystick, cùng các mức ngân sách và cùng giao thức MQTT. Chỉ khác phần cấu hình:
+
 | | `simulator/station` (Wokwi) | `hardware/station` (trạm thật) |
 |---|---|---|
-| Servo | GPIO 17 | GPIO 45 |
-| Joystick | ngưỡng cố định | đo điểm giữa lúc khởi động, vùng trễ, chống rung nút, mỗi lần gạt = 1 mức |
-| Đọc RFID | mỗi vòng lặp | mỗi 150 ms (để joystick không trễ) |
-| Ngân sách | 7 mức | Không GH, 10k, 20k, 50k, 100k |
 | WiFi | `Wokwi-GUEST`, kênh 6 cố định | `config.h`, kênh tự dò |
+| MQTT | `broker.hivemq.com:1883`, không TLS (gateway Wokwi không mở được TLS) | `broker.hivemq.com:8883`, TLS |
+| INA219, pin 9V | chip tự viết trong `chips/`, chỉnh bằng thanh trượt | linh kiện thật |
 
 ## 6. Lỗi thường gặp
 

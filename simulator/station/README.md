@@ -10,6 +10,8 @@ Mô phỏng một trụ sạc SECO hoàn chỉnh theo DD v1.2 và Proposal, gồ
 
 Trụ giao tiếp với API qua MQTT `evcs/EVCS-01/*`.
 
+`sketch.ino` là **cùng một code với trạm thật** (`hardware/station/station.ino`): cùng chân, cùng luồng, cùng giao thức MQTT. Chỉ khác phần cấu hình ở đầu file (WiFi `Wokwi-GUEST`, MQTT cổng 1883 không TLS). `diagram.json` cũng là sơ đồ của trạm thật.
+
 ## Chạy
 
 Mọi lệnh chạy sau `conda activate iad`.
@@ -36,7 +38,7 @@ Hai linh kiện tự làm, INA219 và pin 9V, đã được biên dịch sẵn t
      PLUG 5, STOP 7 ─────►│        ESP32-S3         │◄─────────────┘
      joystick 1 / 2 ─────►│                         ├── GPIO 4 ──► DS18B20 (nhiệt độ)
                           └──┬──────┬──────┬────────┘
-             5 đèn trạng thái │   relay 16  servo 17 ──► khóa đầu sạc   còi 18
+             5 đèn trạng thái │   relay 16  servo 45 ──► khóa đầu sạc   còi 18
                  (38 - 42)    │
    Mạch công suất (sạc):
    Pin 9V (+) ──► relay COM ─[NO]─► INA219 VIN+ ─[shunt 0.1Ω]─ VIN- ──► EV (LED trắng) ──► GND ◄── Pin 9V (−)
@@ -77,7 +79,7 @@ Relay đóng thì pin 9V cấp điện cho "xe" (LED **EV** sáng), và INA219 �
 | Linh kiện | ID | Chân ESP | Chức năng |
 |---|---|---|---|
 | Relay | `relay` | IN 16 (VCC 5V) | **Relay fail-safe**, mặc định **TẮT** khi khởi động. Đóng thì nối pin 9V vào xe. Firmware chỉ cho đóng khi đã cắm sạc, nhiệt độ dưới 35°C **và** server đã mở phiên sạc. Relay tự ngắt khi mất kết nối MQTT. |
-| Servo | `lock` | PWM 17 (V+ 5V) | **Khóa đầu sạc**: 0° = mở, 90° = khóa. Trong luồng khách, sau khi rút sạc, server gửi `LOCK` để giữ đầu sạc cho đến khi thanh toán xong (`UNLOCK`). Mỗi lần khóa hoặc mở, trụ trả `cmd_ack` để web biết trạng thái khóa. |
+| Servo | `lock` | PWM 45 (V+ 5V) | **Khóa đầu sạc**: 0° = mở, 90° = khóa. Trong luồng khách, sau khi rút sạc, server gửi `LOCK` để giữ đầu sạc cho đến khi thanh toán xong (`UNLOCK`). Mỗi lần khóa hoặc mở, trụ trả `cmd_ack` để web biết trạng thái khóa. |
 | LED EV (trắng) | `ev` | Cấp từ INA219 VIN− | Mô phỏng **chiếc xe đang được sạc**. LED sáng khi có điện từ pin chạy qua relay và INA219. |
 
 ### Đèn trạng thái

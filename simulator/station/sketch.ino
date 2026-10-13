@@ -1,21 +1,26 @@
 /*
- * SECO charging station EVCS-01 - full simulation of DD v1.2 / Proposal flows.
+ * SECO charging station EVCS-01 - Wokwi simulation.
+ * The same code as the real station (hardware/station/station.ino): same pins,
+ * flows and MQTT contract. Only the settings below differ (Wokwi WiFi, plain
+ * MQTT port). It talks to the deployed API on Render through broker.hivemq.com;
+ * nothing runs on your computer.
  *
- * Hardware (DD 7)                    Wokwi part
- *   ESP32-S3                         board-esp32-s3-devkitc-1
- *   MFRC522 RFID (SPI)               board-mfrc522
- *   TFT 2.8" 240x320 (SPI)           wokwi-ili9341 (colour screens + payment QR)
- *   INA219 V/I/P (I2C 0x40)          chip-ina219 (custom chip, chips/)
- *   9V battery = charging source     chip-battery-9v (custom chip, chips/)
- *   DS18B20 temperature              wokwi-ds18b20
- *   Fail-safe relay (OFF at boot)    wokwi-relay-module: battery -> INA219 -> EV load
- *   EV (load being charged)          wokwi-led "EV"
- *   PLUG push button                 wokwi-pushbutton "PLUG" (each press = plug in / unplug)
- *   STOP button (technician)         wokwi-pushbutton
- *   Connector lock actuator          wokwi-servo
- *   Budget + START                   wokwi-analog-joystick (left/right = budget, press = START / OK)
- *   Buzzer                           wokwi-buzzer
- *   Status light                     wokwi-rgb-led (one RGB LED, colour = state)
+ * Hardware (DD 7)                    Pin(s)
+ *   ESP32-S3 DevKitC-1 (N16R8)       -
+ *   MFRC522 RFID (SPI)               CS 10, RST 14   (SCK 12, MOSI 11, MISO 13 shared)
+ *   TFT 2.8" ILI9341 240x320 (SPI)   CS 15, DC 6, RST 21 (same SPI bus)
+ *   INA219 V/I/P (I2C 0x40)          SDA 8, SCL 9
+ *   DS18B20 temperature              4
+ *   PLUG push button                 5 -> GND   (each press = plug in / unplug)
+ *   STOP button (technician)         7 -> GND
+ *   Fail-safe relay (OFF at boot)    16  (9V battery -> relay -> INA219 -> EV LED)
+ *   Connector lock servo             45
+ *   Buzzer                           18
+ *   Joystick (VRX, SW)               1 (ADC), 2 -> GND; module "5V" pin on 3V3 (NOT 5V)
+ *   Status light (RGB, common cathode) R 41, G 38, B 39 (colour = state)
+ *   EV LED                           no GPIO: lit when the relay closes
+ * Settings (WiFi, broker, station id, safety limits) are in the block below.
+ * The INA219 and the 9V battery are custom Wokwi chips (chips/).
  *
  * States (DD state table) - the firmware keeps the same values as the API:
  *   Station         READY | CHARGING | ERROR | MAINTENANCE
@@ -76,23 +81,36 @@
 
 // ---- Configuration ---------------------------------------------------------
 
-const char *WIFI_SSID = "Wokwi-GUEST";
-const char *WIFI_PASSWORD = "";
+// Wokwi: the virtual access point, no password.
+#define WIFI_SSID "Wokwi-GUEST"
+#define WIFI_PASSWORD ""
+// Broker of the API deployed on Render (https://seco-backend-api.onrender.com);
+// the web app is on Vercel (https://iad-seco.vercel.app). In Wokwi use the plain
+// port 1883: the Wokwi gateway does not open TLS to 8883 (rc=-2), and
+// broker.hivemq.com is one broker on both ports, so the API still gets every
+// message.
+#define MQTT_HOST "broker.hivemq.com"
+#define MQTT_PORT 1883
+#define MQTT_TLS 0
+#define STATION_ID "EVCS-01"
+#ifndef MQTT_TLS
+#define MQTT_TLS 1
+#endif
+#ifndef MQTT_USERNAME
+#define MQTT_USERNAME nullptr
+#define MQTT_PASSWORD nullptr
+#endif
+#ifndef STATION_ID
+#define STATION_ID "EVCS-01"
+#endif
+#ifndef OVER_TEMPERATURE_C
+#define OVER_TEMPERATURE_C 35.0f  // DS18B20 at / above this -> OVER_TEMPERATURE -> ERROR
+#endif
+#ifndef OVER_CURRENT_A
+#define OVER_CURRENT_A 1.0f       // INA219 above this for 0.5 s -> FAULT (SYSTEM_ERROR)
+#endif
 
-// Broker: broker.hivemq.com, the broker of the API deployed on Render
-// (https://seco-backend-api.onrender.com); the web app is on Vercel
-// (https://iad-seco.vercel.app). Nothing runs on your computer. In Wokwi use
-// the plain port 1883 (MQTT_TLS 0): the Wokwi gateway does not open TLS to
-// 8883 (rc=-2), and broker.hivemq.com is one broker on both ports, so the API
-// still gets every message.
-#define MQTT_TLS 0  // 1 = broker.hivemq.com:8883 over TLS (real hardware on a normal network)
-const char *MQTT_HOST = "broker.hivemq.com";
-const uint16_t MQTT_PORT = MQTT_TLS ? 8883 : 1883;
-const char *MQTT_USERNAME = nullptr;  // set both for a private broker (HiveMQ Cloud)
-const char *MQTT_PASSWORD = nullptr;
-
-const char *STATION_ID = "EVCS-01";
-const char *FIRMWARE = "station-sim-2.1";
+const char *FIRMWARE = "station-sim-3.0";
 
 // Billing: the station measures the energy (INA219 power integrated over time),
 // scales it up (ENERGY_SCALE) and sends it as energy_kwh_sim; the API bills
@@ -110,8 +128,6 @@ const float SHOWN_KW_PER_W = SHOWN_VOLT_SCALE * SHOWN_AMP_SCALE / 1000.0f;
 // Billed energy = measured energy x this, the same factor as the power shown.
 const float ENERGY_SCALE = SHOWN_VOLT_SCALE * SHOWN_AMP_SCALE;
 const unsigned long TICK_MS = 30000;
-const float OVER_TEMPERATURE_C = 35.0f;  // DS18B20 above this -> OVER_TEMPERATURE -> ERROR
-const float OVER_CURRENT_A = 1.0f;       // INA219 above this for 0.5 s -> FAULT (SYSTEM_ERROR)
 
 // ---- Pins (ESP32-S3) -------------------------------------------------------
 
@@ -119,18 +135,28 @@ const uint8_t PIN_SDA = 8, PIN_SCL = 9;  // I2C: INA219 0x40
 const uint8_t RFID_SS = 10, RFID_MOSI = 11, RFID_SCK = 12, RFID_MISO = 13, RFID_RST = 14;
 const uint8_t TFT_CS = 15, TFT_DC = 6, TFT_RST = 21;  // TFT on the same SPI bus (SCK 12, MOSI 11, MISO 13)
 const uint8_t PIN_DS18B20 = 4;
-const uint8_t PIN_PLUG = 5;       // LOW = cable plugged
+const uint8_t PIN_PLUG = 5;       // push button, LOW while pressed: each press = plug in / unplug
 const uint8_t PIN_STOP = 7;       // LOW = pressed
 const uint8_t PIN_RELAY = 16;     // HIGH = battery connected to the EV
-const uint8_t PIN_LOCK = 17;      // servo
+const uint8_t PIN_LOCK = 45;      // servo
 const uint8_t PIN_BUZZER = 18;
-const uint8_t PIN_JOY_HORZ = 1;   // ADC, max = left
+const uint8_t PIN_JOY_HORZ = 1;   // ADC (VRX), max = left; module powered from 3V3
 const uint8_t PIN_JOY_SEL = 2;    // LOW = joystick pressed = START / OK
 const uint8_t LED_R = 41, LED_G = 38, LED_B = 39;  // one RGB status LED, common cathode (see updateLeds)
 
 // Fixed budget levels (VND). 0 = no limit (member: app budget or whole balance).
-const long BUDGET_LEVELS[] = {0, 10000, 20000, 50000, 100000, 200000, 500000};
+const long BUDGET_LEVELS[] = {0, 10000, 20000, 50000, 100000};
 const int BUDGET_COUNT = sizeof(BUDGET_LEVELS) / sizeof(BUDGET_LEVELS[0]);
+
+// Joystick (real module, noisy): see readJoystick().
+const unsigned long JOY_SW_DEBOUNCE_MS = 30;   // SW must stay stable this long to count
+const unsigned long JOY_LOCKOUT_MS = 200;      // ignore X while / right after pressing SW
+const unsigned long JOY_DWELL_MS = 30;         // a direction must hold this long to step
+const unsigned long JOY_RECENTER_MS = 2500;    // stuck off-centre but still: new centre
+const unsigned long JOY_UNDO_MS = 250;         // SW right after a step: that step was a wobble
+const int JOY_VALID_MIN = 300, JOY_VALID_MAX = 3800;  // centre outside = VRX not powered / not wired
+const int JOY_ENTER_PCT = 50, JOY_EXIT_PCT = 25;      // hysteresis, % of the travel to the end
+const unsigned long RFID_POLL_MS = 150;        // a card poll takes ~30 ms: do not slow the joystick
 
 // ---- Devices ---------------------------------------------------------------
 
@@ -216,7 +242,7 @@ unsigned long techUntil = 0;  // verified technician may hold STOP until then
 
 bool relayOn = false;
 bool plugged = false;
-float temperatureC = 35.0f;
+float temperatureC = 25.0f;
 bool sensorOk = true;
 
 bool inaOk = false;        // INA219 found on the I2C bus
@@ -1333,31 +1359,124 @@ void readSerial() {
   }
 }
 
+// Joystick calibration: ADC large = LEFT, small = RIGHT (same as the Wokwi part).
+int joyCenterRaw = 2048;
+bool joyXOk = false;  // VRX gives a sane reading at rest
+
+/** Average of 8 ADC samples (the module is noisy). */
+int readJoyX() {
+  long sum = 0;
+  for (int i = 0; i < 8; i++) sum += analogRead(PIN_JOY_HORZ);
+  return sum / 8;
+}
+
+/** How far towards an end, in % of the travel from the centre (0 = centre, 100 = end). */
+int joyPercent(int x, int end) {
+  int span = end - joyCenterRaw;
+  return abs(span) < 50 ? 0 : (long)(x - joyCenterRaw) * 100 / span;
+}
+
+/** Measure the centre with the joystick at rest (boot, or when it got stuck). */
+void calibrateJoystick() {
+  long sum = 0;
+  for (int i = 0; i < 16; i++) {
+    sum += readJoyX();
+    delay(5);
+  }
+  int center = sum / 16;
+  joyXOk = center >= JOY_VALID_MIN && center <= JOY_VALID_MAX;
+  if (joyXOk) joyCenterRaw = center;
+  Serial.printf("[joy] centre X=%d %s\r\n", center,
+                joyXOk ? "ok" : "INVALID: VRX not on GPIO1, or module not powered from 3V3 (left/right off)");
+}
+
+/** -1 = LEFT, 1 = RIGHT, 0 = centre, with hysteresis around the current direction. */
+int joyDirection(int x, int current) {
+  int left = joyPercent(x, 4095), right = joyPercent(x, 0);
+  if (current == -1) return left > JOY_EXIT_PCT ? -1 : 0;
+  if (current == 1) return right > JOY_EXIT_PCT ? 1 : 0;
+  if (left > JOY_ENTER_PCT) return -1;
+  if (right > JOY_ENTER_PCT) return 1;
+  return 0;
+}
+
 /**
  * Joystick, the only customer control besides the cable:
  *   left / right  budget (READY: guest levels, after a member card: <= balance)
  *   press         START for a guest, OK for a member, new QR once it expired
+ * One push = one step (no auto-repeat). Pressing the stick tilts it a little, so
+ * X is ignored while SW is down, and a step just before the press is undone.
  */
 void readJoystick() {
-  static bool lastPressed = false;
-  static int lastDir = 0;
-  static unsigned long lastMove = 0;
+  static bool selRaw = false, pressed = false;
+  static unsigned long selChangedAt = 0, lockUntil = 0, lastMove = 0;
+  static int joyDir = 0, candidate = 0, lastStepDir = 0, stableRef = 0;
+  static unsigned long candidateSince = 0, stableSince = 0, lastRetry = 0;
 
-  bool pressed = digitalRead(PIN_JOY_SEL) == LOW;
-  int horz = analogRead(PIN_JOY_HORZ);
-  int dir = horz < 800 ? 1 : horz > 3300 ? -1 : 0;  // right = next, left = previous
-  bool moved = dir && (dir != lastDir || millis() - lastMove > 300);  // repeats while held
-  bool clicked = pressed && !lastPressed;
-  lastDir = dir;
-  lastPressed = pressed;
-  if (moved) lastMove = millis();
+  // ---- SW: debounce ----
+  bool clicked = false;
+  bool rawSel = digitalRead(PIN_JOY_SEL) == LOW;
+  if (rawSel != selRaw) {
+    selRaw = rawSel;
+    selChangedAt = millis();
+    lockUntil = millis() + JOY_LOCKOUT_MS;
+  }
+  if (selRaw != pressed && millis() - selChangedAt >= JOY_SW_DEBOUNCE_MS) {
+    pressed = selRaw;
+    lockUntil = millis() + JOY_LOCKOUT_MS;
+    clicked = pressed;
+  }
+
+  // ---- X: filtered, hysteresis, must hold JOY_DWELL_MS ----
+  int moved = 0;
+  int horz = readJoyX();
+  if (!joyXOk) {
+    joyDir = candidate = 0;
+    if (millis() - lastRetry > 1000) {  // VRX came back: calibrate again
+      lastRetry = millis();
+      if (horz >= JOY_VALID_MIN && horz <= JOY_VALID_MAX) calibrateJoystick();
+    }
+  } else {
+    bool xLocked = selRaw || pressed || millis() < lockUntil;
+    int dir = xLocked ? 0 : joyDirection(horz, joyDir);
+    if (dir != candidate) {
+      candidate = dir;
+      candidateSince = millis();
+    }
+    // Stuck to one side while X does not move and is not at the end: the rest
+    // position drifted, take it as the new centre.
+    if (abs(horz - stableRef) > 60) {
+      stableRef = horz;
+      stableSince = millis();
+    }
+    bool atEnd = joyPercent(horz, joyDir < 0 ? 4095 : 0) >= 80;
+    if (joyDir && !xLocked && !atEnd && millis() - stableSince > JOY_RECENTER_MS) {
+      Serial.printf("[joy] stuck %s at X=%d -> new centre\r\n", joyDir > 0 ? "RIGHT" : "LEFT", horz);
+      joyCenterRaw = horz;
+      joyDir = candidate = 0;
+      stableSince = millis();
+    } else if (millis() - candidateSince >= JOY_DWELL_MS && candidate != joyDir) {
+      joyDir = candidate;
+      if (joyDir) {
+        moved = joyDir;  // right = next, left = previous
+        lastMove = millis();
+        lastStepDir = joyDir;
+      }
+    }
+  }
+
+  // A press right after a step: the step came from tilting the stick while pressing.
+  int undo = 0;
+  if (clicked && lastStepDir && millis() - lastMove < JOY_UNDO_MS) undo = -lastStepDir;
+  if (clicked) lastStepDir = 0;
   if (!online() || step == Step::Boot || (!moved && !clicked)) return;
 
   if (step == Step::MemberBudget) {
-    if (moved) {
-      memberOption = (memberOption + dir + memberOptionCount) % memberOptionCount;
+    int delta = moved + undo;
+    if (delta) {
+      memberOption = (memberOption + delta + memberOptionCount) % memberOptionCount;
       memberDecideUntil = millis() + 60000;
-      beep(2600, 20);
+      if (moved) beep(2600, 20);
     }
     messageUntil = 0;
     if (clicked) {
@@ -1379,9 +1498,10 @@ void readJoystick() {
   }
 
   if (!available() || step != Step::Idle) return;
-  if (moved) {
-    guestBudget = (guestBudget + dir + BUDGET_COUNT) % BUDGET_COUNT;
-    beep(2600, 20);
+  int delta = moved + undo;
+  if (delta) {
+    guestBudget = (guestBudget + delta + BUDGET_COUNT) % BUDGET_COUNT;
+    if (moved) beep(2600, 20);
     messageUntil = 0;
     render();
   }
@@ -1402,9 +1522,20 @@ void readJoystick() {
   }
 }
 
+/** A switch input that must stay at the new level for 50 ms before it counts. */
+bool settled(uint8_t pin, bool current, unsigned long &since) {
+  bool now = digitalRead(pin) == LOW;
+  if (now == current) {
+    since = 0;
+    return current;
+  }
+  if (!since) since = millis();
+  return millis() - since >= 50 ? now : current;
+}
+
 void readSwitches() {
-  // PLUG is a push button: each press toggles plugged / unplugged (stands for
-  // the micro-switch in the connector).
+  // PLUG is a push button on the bench: each press toggles plugged / unplugged
+  // (stands for the micro-switch in the connector).
   static bool rawDown = false, stableDown = false;
   static unsigned long changedAt = 0;
   bool down = digitalRead(PIN_PLUG) == LOW;
@@ -1547,7 +1678,11 @@ void setup() {
   inaOk = ina219.begin(&Wire);
   Serial.printf("[boot] INA219 0x40: %s\r\n", inaOk ? "ok" : "NOT FOUND (telemetry V/I/P = 0)");
 
-  // SPI bus shared by the TFT (CS 15) and the MFRC522 (CS 10).
+  // SPI bus shared by the TFT (CS 15) and the MFRC522 (CS 10): deselect both first.
+  pinMode(RFID_SS, OUTPUT);
+  digitalWrite(RFID_SS, HIGH);
+  pinMode(TFT_CS, OUTPUT);
+  digitalWrite(TFT_CS, HIGH);
   SPI.begin(RFID_SCK, RFID_MISO, RFID_MOSI, RFID_SS);
   tft.begin(40000000);
   tft.setRotation(0);  // portrait 240x320
@@ -1565,9 +1700,10 @@ void setup() {
 
   // PLUG is a push button: the cable starts unplugged; press it to plug in.
   plugged = false;
+  calibrateJoystick();  // do not touch the joystick while booting
   render();
 
-  Serial.print("[boot] WiFi");
+  Serial.printf("[boot] WiFi \"%s\"", WIFI_SSID);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 6);
   unsigned long wifiStarted = millis();
@@ -1612,7 +1748,12 @@ void loop() {
   readPower();
   readButtons();
   readJoystick();
-  readCard();
+  static unsigned long lastCard = 0;
+  if (millis() - lastCard >= RFID_POLL_MS) {
+    lastCard = millis();
+    readCard();
+    readJoystick();  // read the stick again right after the slow card poll
+  }
   readSerial();
 
   if (step == Step::MemberBudget && millis() > memberDecideUntil) {  // nobody pressed: cancel
