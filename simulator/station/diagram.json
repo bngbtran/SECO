@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "author": "SECO team - charging station EVCS-01",
+  "author": "SECO team - EVCS-01 real hardware (pins of the bench test)",
   "editor": "wokwi",
   "parts": [
     {
@@ -377,7 +377,7 @@
     ],
     [
       "lock:PWM",
-      "esp:17",
+      "esp:45",
       "orange",
       []
     ],
