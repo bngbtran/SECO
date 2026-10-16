@@ -1,0 +1,95 @@
+/* SECO — generated from brand/tokens.json */
+:root, [data-theme="light"] {
+  --seco-teal: #3e7168;
+  --seco-graphite: #545454;
+  --seco-graphite-soft: #606060;
+  --seco-black: #000000;
+  --seco-white: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #f6f8f7;
+  --brand-soft: #e9f2ef;
+  --line: #e3e8e6;
+  --ink: #15211e;
+  --ink-secondary: #3a4a46;
+  --ink-muted: #5f6f6b;
+  --brand: var(--seco-teal);
+  --brand-deep: #2d5d54;
+  --brand-text: var(--seco-teal);
+  --on-brand: #ffffff;
+  --status-ready: var(--brand-text);
+  --status-charging: #2e6fb7;
+  --status-payment: #9a6512;
+  --status-maintenance: #b4531a;
+  --status-error: #b83a37;
+  --status-offline: #5f6f6b;
+  --focus-ring: #2e6fb7;
+}
+[data-theme="dark"] {
+  --surface: #0f1715;
+  --surface-raised: #16211e;
+  --brand-soft: #1b2b27;
+  --line: #2a3a36;
+  --ink: #e8efec;
+  --ink-secondary: #c3d0cb;
+  --ink-muted: #8fa19b;
+  --brand: var(--seco-teal);
+  --brand-deep: #2d5d54;
+  --brand-text: #7fb3a6;
+  --on-brand: #ffffff;
+  --status-ready: var(--brand-text);
+  --status-charging: #7aabe6;
+  --status-payment: #e2ae52;
+  --status-maintenance: #f09a5e;
+  --status-error: #f0837f;
+  --status-offline: #8fa19b;
+  --focus-ring: #7aabe6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #0f1715;
+    --surface-raised: #16211e;
+    --brand-soft: #1b2b27;
+    --line: #2a3a36;
+    --ink: #e8efec;
+    --ink-secondary: #c3d0cb;
+    --ink-muted: #8fa19b;
+    --brand: var(--seco-teal);
+    --brand-deep: #2d5d54;
+    --brand-text: #7fb3a6;
+    --on-brand: #ffffff;
+    --status-ready: var(--brand-text);
+    --status-charging: #7aabe6;
+    --status-payment: #e2ae52;
+    --status-maintenance: #f09a5e;
+    --status-error: #f0837f;
+    --status-offline: #8fa19b;
+    --focus-ring: #7aabe6;
+  }
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --radius-0: 0px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-pill: 999px;
+  --font-display: "Bungee", "Be Vietnam Pro", system-ui, sans-serif;
+  --font-sans: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+.display-xl { font-family: var(--font-display); font-size: 72px; line-height: 0.95; font-weight: 400; }
+.display-md { font-family: var(--font-display); font-size: 40px; line-height: 1.05; font-weight: 400; }
+.heading-1 { font-family: var(--font-sans); font-size: 32px; line-height: 40px; font-weight: 700; letter-spacing: -0.01em; }
+.heading-2 { font-family: var(--font-sans); font-size: 24px; line-height: 32px; font-weight: 700; }
+.heading-3 { font-family: var(--font-sans); font-size: 18px; line-height: 26px; font-weight: 600; }
+.body { font-family: var(--font-sans); font-size: 16px; line-height: 26px; font-weight: 400; }
+.body-sm { font-family: var(--font-sans); font-size: 14px; line-height: 22px; font-weight: 400; }
+.label { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; }
+.data-lg { font-family: var(--font-mono); font-size: 32px; line-height: 36px; font-weight: 500; }
+.data { font-family: var(--font-mono); font-size: 14px; line-height: 20px; font-weight: 500; }

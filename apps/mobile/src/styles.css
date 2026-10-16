@@ -4,7 +4,7 @@
   --line: #dce6e4;
   --soft: #f4f7f6;
   --paper: #ffffff;
-  --brand: #3f796e;
+  --brand: #3e7168;
   --brand-deep: #2d5d54;
   --brand-soft: #e9f2ef;
   --danger: #d94e4d;
@@ -66,7 +66,7 @@ body { display: grid; place-items: center; min-height: 100vh; padding: 18px; }
 .field label { font-size: 13px; font-weight: 650; }
 .field input, .field textarea { width: 100%; border: 1px solid #d8e3e1; border-radius: 12px; min-height: 47px; padding: 0 13px; outline: none; color: var(--ink); background: #fff; }
 .field textarea { padding-top: 12px; resize: vertical; min-height: 92px; }
-.field input:focus, .field textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(63,121,110,.12); }
+.field input:focus, .field textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(62,113,104,.12); }
 
 .login { padding: 48px 25px 19px; display: flex; flex: 1; min-height: 0; overflow-y: auto; flex-direction: column; }
 .logo-mark { width: 53px; height: 53px; display: grid; place-items: center; border-radius: 15px; color: #fff; background: var(--brand); font-size: 29px; font-weight: 300; margin-bottom: 27px; }
@@ -269,6 +269,7 @@ body { display: grid; place-items: center; min-height: 100vh; padding: 18px; }
 .empty-state p { color: var(--muted); font-size: 13px; line-height: 1.45; margin: 0; }
 .help-hero { background: var(--brand-soft); border-radius: 17px; padding: 14px; display: flex; align-items: center; gap: 12px; }
 .help-hero .logo-mark { width: 45px; height: 45px; margin: 0; font-size: 23px; }
+.logo-mark img { width: 64%; height: 64%; display: block; object-fit: contain; }
 .help-hero strong { font-size: 15px; }
 .help-hero p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .help-list { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }

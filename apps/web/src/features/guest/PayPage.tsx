@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, XCircle, Zap } from "lucide-react";
+import { CheckCircle2, Clock, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -81,7 +81,7 @@ export default function PayPage() {
       <div className="card" style={{ width: "min(420px, 100%)" }}>
         <div className="card-h" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div className="brand-mark">
-            <Zap size={16} />
+            <img src="/seco-mark-white.png" alt="" />
           </div>
           <div style={{ flex: 1 }}>
             <b>SECO · Thanh toán sạc</b>
