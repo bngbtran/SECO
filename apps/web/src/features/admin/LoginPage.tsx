@@ -1,4 +1,3 @@
-import { Zap } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
@@ -41,7 +40,7 @@ export default function LoginPage() {
       <div className="login-hero">
         <div className="brand" style={{ color: "#fff" }}>
           <div className="brand-mark" style={{ background: "#fff", color: "var(--primary)" }}>
-            <Zap size={18} />
+            <img src="/seco-mark.png" alt="" />
           </div>
           SECO Admin
         </div>

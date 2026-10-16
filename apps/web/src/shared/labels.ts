@@ -17,7 +17,7 @@ export const AVAILABILITY_BADGE: Record<string, string> = {
 };
 
 export const AVAILABILITY_COLOR: Record<string, string> = {
-  AVAILABLE: "#437066",
+  AVAILABLE: "#3e7168",
   CHARGING: "#2e6fb7",
   WAITING_PAYMENT: "#d69e2e",
   ERROR: "#c8423f",

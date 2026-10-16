@@ -91,7 +91,7 @@ export default function AdminLayout() {
       <aside className="side">
         <div className="brand">
           <span className="brand-mark">
-            <Zap size={18} />
+            <img src="/seco-mark-white.png" alt="" />
           </span>
           <div>
             SECO<small>Web Admin</small>

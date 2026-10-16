@@ -5,7 +5,7 @@ import { useId } from "react";
 export function AreaChart({
   values,
   height = 200,
-  color = "#437066",
+  color = "#3e7168",
   labels = [],
   format = (v: number) => String(v),
   yTicks = 4,
@@ -77,7 +77,7 @@ export function BarChart({
   values,
   labels,
   height = 220,
-  color = "#437066",
+  color = "#3e7168",
   format = (v: number) => String(v),
   highlight = -1,
 }: {

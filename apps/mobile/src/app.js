@@ -63,7 +63,7 @@ const AVAILABILITY = {
   MAINTENANCE: ['Bảo trì', 'orange'],
   OFFLINE: ['Offline', 'gray']
 };
-const MAP_COLORS = { green: '#3f796e', blue: '#256fc1', red: '#d94e4d', orange: '#bf7b23', gray: '#8a9793' };
+const MAP_COLORS = { green: '#3e7168', blue: '#256fc1', red: '#d94e4d', orange: '#bf7b23', gray: '#8a9793' };
 
 const STOP_REASONS = {
   UNPLUG: 'Rút sạc',
@@ -330,7 +330,7 @@ function keyval(label, value) {
 // ---------------------------------------------------------------------------
 
 function loginScreen() {
-  return shell(`<section class="login"><div class="logo-mark">${icon('bolt')}</div><h1>Chào mừng trở lại</h1><p class="login-copy">Đăng nhập để tìm trạm, theo dõi phiên sạc và ví của bạn.</p><form class="stack" data-form="login"><div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required /></div><div class="field"><label for="password">Mật khẩu</label><input id="password" name="password" type="password" autocomplete="current-password" required /></div><button class="btn btn-primary btn-block">Đăng nhập</button></form><button class="link-btn" data-go="forgotPassword" style="align-self:flex-end;margin-top:10px">Quên mật khẩu?</button><p class="login-foot">Chưa có tài khoản? <strong>Đăng ký tại quầy SECO để được tạo tài khoản và cấp thẻ RFID.</strong><br/>Quản trị viên dùng web admin.</p></section>`);
+  return shell(`<section class="login"><div class="logo-mark"><img src="/assets/brand/seco-mark-white.png" alt="SECO"></div><h1>Chào mừng trở lại</h1><p class="login-copy">Đăng nhập để tìm trạm, theo dõi phiên sạc và ví của bạn.</p><form class="stack" data-form="login"><div class="field"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required /></div><div class="field"><label for="password">Mật khẩu</label><input id="password" name="password" type="password" autocomplete="current-password" required /></div><button class="btn btn-primary btn-block">Đăng nhập</button></form><button class="link-btn" data-go="forgotPassword" style="align-self:flex-end;margin-top:10px">Quên mật khẩu?</button><p class="login-foot">Chưa có tài khoản? <strong>Đăng ký tại quầy SECO để được tạo tài khoản và cấp thẻ RFID.</strong><br/>Quản trị viên dùng web admin.</p></section>`);
 }
 
 function forgotPasswordScreen() {
